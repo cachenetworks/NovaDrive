@@ -1,0 +1,37 @@
+services:
+  web:
+    build:
+      context: .
+    command: ["waitress-serve", "--host=0.0.0.0", "--port=5000", "--call", "novadrive.app:create_app"]
+    env_file:
+      - .env
+    environment:
+      DISCORD_BOT_BRIDGE_URL: http://bot:5051
+    ports:
+      - "5000:5000"
+    volumes:
+      - novadrive-instance:/app/instance
+    depends_on:
+      - bot
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/healthz').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: .
+    command: ["python", "-m", "novadrive.discord_bot"]
+    env_file:
+      - .env
+    environment:
+      DISCORD_BOT_BRIDGE_URL: http://0.0.0.0:5051
+    volumes:
+      - novadrive-instance:/app/instance
+    restart: unless-stopped
+
+volumes:
+  novadrive-instance:

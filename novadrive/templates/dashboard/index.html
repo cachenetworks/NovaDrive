@@ -216,6 +216,87 @@
       </div>
 
       <div class="nova-panel p-5">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">ShareX API</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">Token and uploader config</h3>
+            <p class="mt-2 text-sm leading-7 text-slate-400">Generate a per-user API key, then import the NovaDrive `.sxcu` file into ShareX for file, image, and text uploads straight into this folder.</p>
+          </div>
+          <a href="{{ url_for('api.sharex_config', folder_id=current_folder.id) }}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Download Fresh SXCU</a>
+        </div>
+
+        <div class="mt-5 space-y-4">
+          <div class="rounded-3xl border border-white/10 bg-white/5 p-4">
+            <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Upload endpoint</p>
+            <p class="mt-2 break-all text-sm text-white">{{ url_for('api.sharex_upload', folder_id=current_folder.id, _external=True) }}</p>
+            <p class="mt-2 text-xs leading-6 text-slate-500">Downloading a fresh `.sxcu` will embed the current plaintext key. If this browser no longer has it, NovaDrive rotates the key automatically.</p>
+          </div>
+
+          {% if generated_api_key %}
+            <div class="rounded-3xl border border-emerald-400/20 bg-emerald-500/10 p-4">
+              <p class="text-xs uppercase tracking-[0.24em] text-emerald-200/80">New API key</p>
+              <div class="mt-3 flex flex-col gap-3 sm:flex-row">
+                <input type="text" readonly value="{{ generated_api_key }}" class="nova-input flex-1">
+                <button type="button" class="rounded-2xl border border-emerald-300/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-100 transition hover:bg-emerald-500/20" data-copy-text="{{ generated_api_key }}">Copy Key</button>
+              </div>
+              <p class="mt-3 text-xs leading-6 text-emerald-100/80">This value is only shown once. Regenerate if you lose it.</p>
+            </div>
+          {% else %}
+            <div class="rounded-3xl border border-white/10 bg-white/5 p-4">
+              <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Current key</p>
+              {% if current_user.has_api_key %}
+                <p class="mt-2 text-sm text-white">Stored and active{% if current_user.api_key_last4 %} ending in <span class="font-mono">{{ current_user.api_key_last4 }}</span>{% endif %}</p>
+                <p class="mt-2 text-xs text-slate-500">Created {{ current_user.api_key_created_at|datetime }}</p>
+              {% else %}
+                <p class="mt-2 text-sm text-slate-400">No API key has been generated for this account yet.</p>
+              {% endif %}
+            </div>
+          {% endif %}
+
+          <div class="flex flex-wrap gap-3">
+            <form action="{{ url_for('auth.regenerate_api_key') }}" method="post" class="flex-1">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="nova-button-primary w-full">{{ "Regenerate API Key" if current_user.has_api_key else "Generate API Key" }}</button>
+            </form>
+            {% if current_user.has_api_key %}
+              <form action="{{ url_for('auth.revoke_api_key') }}" method="post" class="flex-1">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="w-full rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-100 transition hover:bg-rose-500/20" data-confirm-submit data-confirm-title="Revoke API key?" data-confirm-body="ShareX uploads using the current key will stop working until you generate a new one.">Revoke</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="nova-panel p-5">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">WebDAV</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">Desktop and mobile drive access</h3>
+            <p class="mt-2 text-sm leading-7 text-slate-400">Connect NovaDrive from WebDAV-capable clients for direct folder browsing, upload, download, create, delete, and move operations against your own drive.</p>
+          </div>
+          <span class="rounded-full border {% if config.WEBDAV_ENABLED %}border-emerald-400/20 bg-emerald-500/10 text-emerald-100{% else %}border-rose-400/20 bg-rose-500/10 text-rose-100{% endif %} px-3 py-1 text-xs">
+            {{ "Enabled" if config.WEBDAV_ENABLED else "Disabled" }}
+          </span>
+        </div>
+
+        <div class="mt-5 space-y-4">
+          <div class="rounded-3xl border border-white/10 bg-white/5 p-4">
+            <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Endpoint</p>
+            <p class="mt-2 break-all text-sm text-white">{{ url_for('webdav.dispatch', resource_path='', _external=True) }}</p>
+          </div>
+          <div class="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-slate-300">
+            <p>Username: <span class="text-white">{{ current_user.username }}</span> or <span class="text-white">{{ current_user.email }}</span></p>
+            <p class="mt-2">Password: your normal NovaDrive account password</p>
+            <p class="mt-2">Scope: only your own drive, not the global admin view</p>
+            {% if config.EMAIL_VERIFICATION_REQUIRED %}
+              <p class="mt-2 text-amber-200">Password login and WebDAV access require a verified email address.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="nova-panel p-5">
         <div class="flex items-center justify-between">
           <div>
             <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Recent Activity</p>

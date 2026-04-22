@@ -7,6 +7,7 @@ import click
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, url_for
 from flask_login import current_user
+from sqlalchemy import inspect, text
 
 from novadrive.config import Config
 from novadrive.extensions import csrf, db, login_manager, migrate
@@ -28,7 +29,9 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
 
     configure_logging(app.config["LOG_LEVEL"])
     _init_extensions(app)
+    _ensure_runtime_schema(app)
     _register_blueprints(app)
+    _register_routes(app)
     _register_template_helpers(app)
     _register_error_handlers(app)
     _register_cli(app)
@@ -51,19 +54,59 @@ def load_user(user_id: str) -> User | None:
 
 
 def _register_blueprints(app: Flask) -> None:
+    from novadrive.routes.api import api_bp
     from novadrive.routes.admin import admin_bp
     from novadrive.routes.auth import auth_bp
     from novadrive.routes.dashboard import dashboard_bp
     from novadrive.routes.files import files_bp
     from novadrive.routes.folders import folders_bp
     from novadrive.routes.share import share_bp
+    from novadrive.routes.webdav import webdav_bp
 
+    app.register_blueprint(api_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(files_bp)
     app.register_blueprint(folders_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(share_bp)
+    app.register_blueprint(webdav_bp)
+
+
+def _register_routes(app: Flask) -> None:
+    @app.get("/healthz")
+    def healthz():
+        return {
+            "ok": True,
+            "app": app.config["APP_NAME"],
+        }
+
+
+def _ensure_runtime_schema(app: Flask) -> None:
+    with app.app_context():
+        db.create_all()
+
+        inspector = inspect(db.engine)
+        if "user" not in inspector.get_table_names():
+            return
+
+        user_columns = {column["name"] for column in inspector.get_columns("user")}
+        statements: list[str] = []
+        if "api_key_hash" not in user_columns:
+            statements.append('ALTER TABLE "user" ADD COLUMN api_key_hash VARCHAR(64)')
+        if "api_key_last4" not in user_columns:
+            statements.append('ALTER TABLE "user" ADD COLUMN api_key_last4 VARCHAR(4)')
+        if "api_key_created_at" not in user_columns:
+            statements.append('ALTER TABLE "user" ADD COLUMN api_key_created_at TIMESTAMP')
+        if "email_verified_at" not in user_columns:
+            statements.append('ALTER TABLE "user" ADD COLUMN email_verified_at TIMESTAMP')
+        if "email_verification_sent_at" not in user_columns:
+            statements.append('ALTER TABLE "user" ADD COLUMN email_verification_sent_at TIMESTAMP')
+        statements.append('CREATE INDEX IF NOT EXISTS ix_user_api_key_hash ON "user" (api_key_hash)')
+
+        with db.engine.begin() as connection:
+            for statement in statements:
+                connection.execute(text(statement))
 
 
 def _register_template_helpers(app: Flask) -> None:
@@ -141,6 +184,7 @@ def _register_cli(app: Flask) -> None:
             email=email,
             password=password,
             force_role="admin",
+            email_verified=True,
         )
         click.echo(f"Admin user created: {user.username}")
 

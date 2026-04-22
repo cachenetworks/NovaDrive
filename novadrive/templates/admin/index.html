@@ -52,6 +52,10 @@
         <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Config Snapshot</p>
         <div class="mt-5 space-y-3 text-sm">
           <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Public sharing: <span class="text-white">{{ "enabled" if config_snapshot.allow_public_sharing else "disabled" }}</span></div>
+          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">WebDAV: <span class="text-white">{{ "enabled" if config_snapshot.webdav_enabled else "disabled" }}</span></div>
+          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Email verification: <span class="text-white">{{ "required" if config_snapshot.email_verification_required else "optional" }}</span></div>
+          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">SMTP: <span class="text-white">{{ "configured" if config_snapshot.smtp_enabled else "not configured" }}</span></div>
+          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Admin accounts: <span class="text-white">{{ config_snapshot.admin_count }}</span></div>
           <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Chunk size: <span class="text-white">{{ config_snapshot.chunk_size|filesize }}</span></div>
           <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Bridge URL: <span class="text-white">{{ config_snapshot.bridge_url }}</span></div>
           <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Channels: <span class="text-white">{{ config_snapshot.channels|join(', ') if config_snapshot.channels else 'None configured' }}</span></div>
@@ -71,8 +75,10 @@
               <tr>
                 <th class="px-6 py-4">User</th>
                 <th class="px-6 py-4">Role</th>
+                <th class="px-6 py-4">Email</th>
                 <th class="px-6 py-4">Joined</th>
                 <th class="px-6 py-4">Last login</th>
+                <th class="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-white/5">
@@ -80,11 +86,24 @@
                 <tr>
                   <td class="px-6 py-4">
                     <p class="font-medium text-white">{{ user.username }}</p>
-                    <p class="text-xs text-slate-500">{{ user.email }}</p>
                   </td>
                   <td class="px-6 py-4 text-slate-300">{{ user.role|title }}</td>
+                  <td class="px-6 py-4">
+                    <p class="text-slate-300">{{ user.email }}</p>
+                    <p class="mt-1 text-xs {% if user.is_email_verified %}text-emerald-300{% else %}text-amber-300{% endif %}">{{ "verified" if user.is_email_verified else "pending verification" }}</p>
+                  </td>
                   <td class="px-6 py-4 text-slate-300">{{ user.created_at|datetime }}</td>
                   <td class="px-6 py-4 text-slate-300">{{ user.last_login_at|datetime }}</td>
+                  <td class="px-6 py-4">
+                    <form action="{{ url_for('admin.update_user_role', user_id=user.id) }}" method="post" class="flex items-center justify-end gap-2">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <select name="role" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
+                        <option value="user" {% if user.role == 'user' %}selected{% endif %}>User</option>
+                        <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                      </select>
+                      <button type="submit" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Save</button>
+                    </form>
+                  </td>
                 </tr>
               {% endfor %}
             </tbody>

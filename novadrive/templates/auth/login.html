@@ -56,6 +56,18 @@
       <button type="submit" class="nova-button-primary w-full">Sign In</button>
     </form>
 
+    {% if pending_verification_email %}
+      <div class="mt-5 rounded-3xl border border-amber-400/20 bg-amber-500/10 p-4">
+        <p class="text-sm font-medium text-amber-100">Email confirmation is still pending for {{ pending_verification_email }}.</p>
+        <p class="mt-2 text-sm leading-7 text-amber-50/90">Use the link from your inbox, or request a fresh verification email below.</p>
+        <form action="{{ url_for('auth.resend_verification') }}" method="post" class="mt-4">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="email" value="{{ pending_verification_email }}">
+          <button type="submit" class="rounded-2xl border border-amber-300/30 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-50 transition hover:bg-amber-500/20">Resend Verification Email</button>
+        </form>
+      </div>
+    {% endif %}
+
     <p class="mt-6 text-sm text-slate-400">
       Need an account?
       <a href="{{ url_for('auth.register') }}" class="font-medium text-fuchsia-200 transition hover:text-white">Create one</a>

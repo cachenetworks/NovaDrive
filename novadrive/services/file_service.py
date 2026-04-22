@@ -294,10 +294,6 @@ class FileService:
             digest.update(buffer)
             spool.write(buffer)
 
-        if total_size == 0:
-            spool.close()
-            raise ValidationError("Empty files are not supported.")
-
         spool.seek(0)
         backend = DiscordStorageBackend(config)
         file_record = existing_file or File(

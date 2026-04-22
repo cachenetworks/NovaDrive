@@ -22,12 +22,16 @@ This repo gives you a clean base to keep building from.
 
 - Secure authentication with hashed passwords and signed session cookies
 - Automatic first-user admin bootstrap
+- Optional SMTP-backed email verification for account activation
+- WebDAV support for direct upload, download, folder creation, delete, and move from desktop/mobile clients
 - Nested folders with ownership-aware create, move, rename, and delete flows
 - File upload, rename, move, soft delete, hard delete, and verified download
+- ShareX-compatible file, image, and text uploads with per-user API keys and generated `.sxcu` config
 - Discord chunk manifests stored in SQLite with message IDs, channel IDs, URLs, and checksums
-- Share links with optional expiry
+- Share links with optional expiry, inline media playback, raw links, and text file rendering
 - Search, filtering, recent activity, storage usage summaries, and admin health visibility
 - Modular service layer with a storage abstraction so Discord can be swapped later
+- Docker and Docker Compose support plus a GitHub Actions image build workflow
 - Dark premium UI with Tailwind, Jinja, glassmorphism panels, and polished dashboard flows
 
 ## Tech stack
@@ -115,7 +119,8 @@ README.md                 You are here
 - Password hashing
 - Session cookie auth
 - First registered user becomes admin
-- Basic `admin` and `user` role model
+- Optional email verification before password login and WebDAV access
+- Basic `admin` and `user` role model with admin role reassignment from the admin console
 
 ### File management
 
@@ -139,7 +144,23 @@ README.md                 You are here
 - Tokenized share links
 - Optional expiry
 - Public download by token
+- Public image, video, audio, and text previews by token
 - Global sharing toggle via config
+
+### WebDAV
+
+- Basic-auth WebDAV endpoint scoped to the authenticated user's drive
+- `PROPFIND`, `GET`, `HEAD`, `PUT`, `MKCOL`, `DELETE`, `MOVE`, and `OPTIONS`
+- Desktop and mobile client support using normal NovaDrive credentials
+- Works for verified multi-user accounts without exposing the global admin view
+
+### ShareX uploads
+
+- Header-authenticated upload API for ShareX custom uploaders
+- Per-user API key generation and revocation
+- One-click `.sxcu` export from the dashboard
+- File, image, and text upload support through the same endpoint
+- Share link response payloads with preview, raw, and download URLs
 
 ### Admin surface
 
@@ -254,6 +275,8 @@ http://127.0.0.1:5000
 
 Register the first account. That user becomes the initial admin automatically.
 
+If `EMAIL_VERIFICATION_REQUIRED=true`, new accounts must confirm their email before normal login and WebDAV access are enabled.
+
 ## Discord setup guide
 
 To make the storage layer work properly:
@@ -281,10 +304,26 @@ Recommended bot permissions:
 | --- | --- | --- |
 | `SECRET_KEY` | Flask session signing secret | `super-long-random-secret` |
 | `DATABASE_URL` | SQLAlchemy database URL | `sqlite:///instance/novadrive.db` |
+| `APP_EXTERNAL_URL` | Public app URL used in verification emails | `https://drive.example.com` |
 | `MAX_UPLOAD_SIZE_BYTES` | Max allowed file size through Flask | `536870912` |
 | `SPOOL_MAX_MEMORY_BYTES` | Max in-memory temp spool before disk spill | `8388608` |
+| `TEXT_PREVIEW_MAX_BYTES` | Max text bytes rendered inline on preview pages | `1048576` |
 | `ALLOW_PUBLIC_SHARING` | Enables share link generation | `true` |
 | `SOFT_DELETE_ENABLED` | Keeps deleted items out of active view by default | `true` |
+| `WEBDAV_ENABLED` | Enables the built-in WebDAV endpoint | `true` |
+| `WEBDAV_REALM` | HTTP auth realm shown to WebDAV clients | `NovaDrive WebDAV` |
+| `EMAIL_VERIFICATION_REQUIRED` | Require email confirmation before password login | `true` |
+| `EMAIL_VERIFICATION_MAX_AGE_SECONDS` | Verification link lifetime | `86400` |
+| `EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS` | Minimum resend interval | `60` |
+| `SMTP_HOST` | SMTP host for outbound mail | `smtp.mailgun.org` |
+| `SMTP_PORT` | SMTP port | `587` |
+| `SMTP_USERNAME` | SMTP username | `postmaster@example.com` |
+| `SMTP_PASSWORD` | SMTP password | `...` |
+| `SMTP_USE_TLS` | Enable STARTTLS | `true` |
+| `SMTP_USE_SSL` | Connect with SMTPS | `false` |
+| `SMTP_FROM_EMAIL` | Sender email address | `noreply@example.com` |
+| `SMTP_FROM_NAME` | Sender display name | `NovaDrive` |
+| `SMTP_TIMEOUT_SECONDS` | SMTP connection timeout | `20` |
 | `DISCORD_BOT_TOKEN` | Bot token for Discord connectivity | `...` |
 | `DISCORD_GUILD_ID` | Discord server ID | `123456789012345678` |
 | `DISCORD_STORAGE_CHANNEL_IDS` | Comma-separated storage channel IDs | `111...,222...` |
@@ -297,6 +336,47 @@ Recommended bot permissions:
 | `DISCORD_UPLOAD_RETRY_COUNT` | Retry count for storage bridge HTTP calls | `3` |
 | `SHARE_TOKEN_BYTES` | Entropy size for generated share tokens | `24` |
 | `LOG_LEVEL` | Application log verbosity | `INFO` |
+
+## ShareX quick start
+
+NovaDrive now exposes a ShareX-friendly upload endpoint and a generated `.sxcu` profile.
+
+1. Sign in to NovaDrive.
+2. Open the dashboard in the folder you want ShareX uploads to land in.
+3. Generate an API key if you do not have one yet.
+4. Click `Download Fresh SXCU`.
+5. Import the downloaded `.sxcu` file into ShareX.
+6. Set that custom uploader as your image, file, and text uploader.
+
+The generated config uses:
+
+- `POST` multipart uploads
+- `X-NovaDrive-API-Key` header authentication
+- the current folder as the target destination
+- `{json:url}` as the final result URL
+
+ShareX uploads return a public NovaDrive share page that can:
+
+- play video and audio inline
+- render images directly
+- display text files in the browser
+- expose raw and download links
+
+## WebDAV quick start
+
+NovaDrive now exposes a built-in WebDAV endpoint at `/dav/`.
+
+Use these settings in a WebDAV-capable client:
+
+- URL: `https://your-host/dav/`
+- Username: your NovaDrive username or email
+- Password: your normal NovaDrive password
+
+Notes:
+
+- WebDAV only exposes the authenticated user's own drive.
+- Admins still get their own drive over WebDAV, not the full global admin scope.
+- If email verification is required, the account must be verified before WebDAV login works.
 
 ## Storage model details
 
@@ -348,6 +428,8 @@ NovaDrive already includes a solid MVP baseline:
 - Files are not stored permanently on the web server during upload
 - Downloads are rebuilt only after checksum validation
 - Share links can be disabled globally or set to expire
+- API keys are stored as SHA256 hashes, not plaintext
+- Verification links are signed and time-limited
 
 That said, if you push beyond local or small-team usage, you should still add:
 
@@ -389,6 +471,43 @@ flask --app novadrive.app:create_app run --debug
 ```bash
 python -m novadrive.discord_bot
 ```
+
+## Docker
+
+NovaDrive now ships with a `Dockerfile` and `docker-compose.yml`.
+
+### Build the image
+
+```bash
+docker build -t novadrive .
+```
+
+### Run with Docker Compose
+
+```bash
+docker compose up --build
+```
+
+The compose file starts:
+
+- `web` on port `5000`
+- `bot` as the Discord bridge process
+
+Important notes:
+
+- Both services read from `.env`.
+- Compose overrides `DISCORD_BOT_BRIDGE_URL` automatically so the web app talks to the bot container over the internal Docker network.
+- The SQLite database and instance files are stored in the named `novadrive-instance` volume.
+
+## GitHub Actions container build
+
+The repository now includes `.github/workflows/docker.yml`.
+
+It will:
+
+- build the Docker image on pull requests
+- build on pushes to branches
+- publish to `ghcr.io/<owner>/<repo>` on pushes to `main` or `master`
 
 ## Development workflow
 
@@ -455,15 +574,18 @@ npm run build:css
 
 - Upload resume support is only partial right now. The service layer is manifest-aware, but the browser upload flow is still a single request and not fully resumable across restarts.
 - Shared downloads rebuild files on demand, which can use temporary memory or disk buffering for large files.
+- Inline previews still rebuild files from Discord-backed chunks on demand, so very large media is functional but not as efficient as a dedicated streaming backend.
+- WebDAV is intentionally lightweight and focuses on common client flows rather than the full Nextcloud protocol surface such as locking, versioning, comments, and sync metadata.
 - The bot bridge is intentionally simple for local development and MVP use. Larger deployments should put a stronger internal service boundary in front of Discord I/O.
-- The admin surface is currently read-oriented. It gives visibility into health and usage, but not full in-app configuration editing.
+- The admin surface now supports role changes, but it is still not a full in-app configuration editor.
 - SQLite is a good MVP default, but PostgreSQL is the right next step for multi-user concurrency and heavier production workloads.
 
 ## Suggested next steps
 
 - Add resumable browser uploads with persisted client-side upload sessions
 - Move long-running chunk operations into background jobs
-- Add previews for images, video, audio, and documents
+- Add app passwords or per-device WebDAV credentials instead of reusing the main password
+- Add PDF/document-specific preview flows and syntax highlighting for code/text
 - Add recycle bin restore flows and bulk actions
 - Add team/org permissions and deeper audit trails
 - Add PostgreSQL support and environment-specific config profiles

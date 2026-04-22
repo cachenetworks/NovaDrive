@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from flask import Blueprint, current_app, render_template
-from flask_login import login_required
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask_login import current_user, login_required
 from sqlalchemy import func
 
 from novadrive.extensions import db
 from novadrive.models import ActivityLog, File, Folder, User
+from novadrive.services.auth_service import AuthService
 from novadrive.services.discord_storage import DiscordStorageBackend, StorageBackendError
+from novadrive.services.email_service import EmailService
 from novadrive.utils.decorators import admin_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -48,5 +50,30 @@ def index():
             "chunk_size": current_app.config["DISCORD_CHUNK_SIZE_BYTES"],
             "channels": current_app.config["DISCORD_STORAGE_CHANNEL_IDS"],
             "bridge_url": current_app.config["DISCORD_BOT_BRIDGE_URL"],
+            "webdav_enabled": current_app.config["WEBDAV_ENABLED"],
+            "email_verification_required": current_app.config["EMAIL_VERIFICATION_REQUIRED"],
+            "smtp_enabled": EmailService.is_configured(current_app.config),
+            "admin_count": AuthService.count_admins(),
         },
     )
+
+
+@admin_bp.route("/users/<int:user_id>/role", methods=["POST"])
+@login_required
+@admin_required
+def update_user_role(user_id: int):
+    user = db.session.get(User, user_id)
+    if not user:
+        flash("User not found.", "error")
+        return redirect(url_for("admin.index"))
+
+    try:
+        AuthService.update_role(
+            user,
+            request.form.get("role", ""),
+            actor_id=current_user.id,
+        )
+        flash("User role updated.", "success")
+    except ValueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("admin.index"))

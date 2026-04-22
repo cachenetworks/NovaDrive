@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import Blueprint, abort, render_template, request
+from flask import Blueprint, abort, render_template, request, session
 from flask_login import current_user, login_required
 
 from novadrive.models import ActivityLog
@@ -59,4 +59,5 @@ def index():
         scope=scope,
         type_filter=type_filter,
         view_mode=view_mode,
+        generated_api_key=session.pop("nova_generated_api_key", None),
     )

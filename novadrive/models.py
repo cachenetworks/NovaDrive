@@ -30,6 +30,11 @@ class User(UserMixin, TimestampMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(16), nullable=False, default="user", index=True)
     last_login_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    email_verified_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    email_verification_sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    api_key_hash = db.Column(db.String(64), nullable=True, index=True)
+    api_key_last4 = db.Column(db.String(4), nullable=True)
+    api_key_created_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     folders = db.relationship("Folder", back_populates="owner", lazy="select")
     files = db.relationship("File", back_populates="owner", lazy="select")
@@ -39,6 +44,14 @@ class User(UserMixin, TimestampMixin, db.Model):
     @property
     def is_admin(self) -> bool:
         return self.role == "admin"
+
+    @property
+    def has_api_key(self) -> bool:
+        return bool(self.api_key_hash)
+
+    @property
+    def is_email_verified(self) -> bool:
+        return self.email_verified_at is not None
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)

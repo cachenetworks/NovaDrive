@@ -22,6 +22,7 @@ class Config:
 
     BASE_DIR = Path(__file__).resolve().parent.parent
     INSTANCE_DIR = BASE_DIR / "instance"
+    APP_EXTERNAL_URL = os.getenv("APP_EXTERNAL_URL", "").rstrip("/")
 
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
     SQLALCHEMY_DATABASE_URI = os.getenv(
@@ -33,6 +34,7 @@ class Config:
     MAX_UPLOAD_SIZE_BYTES = _as_int(os.getenv("MAX_UPLOAD_SIZE_BYTES"), 536_870_912)
     MAX_CONTENT_LENGTH = MAX_UPLOAD_SIZE_BYTES
     SPOOL_MAX_MEMORY_BYTES = _as_int(os.getenv("SPOOL_MAX_MEMORY_BYTES"), 8_388_608)
+    TEXT_PREVIEW_MAX_BYTES = _as_int(os.getenv("TEXT_PREVIEW_MAX_BYTES"), 1_048_576)
 
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
@@ -47,6 +49,31 @@ class Config:
     STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "discord")
     ALLOW_PUBLIC_SHARING = _as_bool(os.getenv("ALLOW_PUBLIC_SHARING"), True)
     SOFT_DELETE_ENABLED = _as_bool(os.getenv("SOFT_DELETE_ENABLED"), True)
+    WEBDAV_ENABLED = _as_bool(os.getenv("WEBDAV_ENABLED"), True)
+    WEBDAV_REALM = os.getenv("WEBDAV_REALM", "NovaDrive WebDAV")
+
+    EMAIL_VERIFICATION_REQUIRED = _as_bool(
+        os.getenv("EMAIL_VERIFICATION_REQUIRED"),
+        False,
+    )
+    EMAIL_VERIFICATION_MAX_AGE_SECONDS = _as_int(
+        os.getenv("EMAIL_VERIFICATION_MAX_AGE_SECONDS"),
+        86_400,
+    )
+    EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS = _as_int(
+        os.getenv("EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS"),
+        60,
+    )
+
+    SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
+    SMTP_PORT = _as_int(os.getenv("SMTP_PORT"), 587)
+    SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+    SMTP_USE_TLS = _as_bool(os.getenv("SMTP_USE_TLS"), True)
+    SMTP_USE_SSL = _as_bool(os.getenv("SMTP_USE_SSL"), False)
+    SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "").strip()
+    SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", APP_NAME)
+    SMTP_TIMEOUT_SECONDS = _as_int(os.getenv("SMTP_TIMEOUT_SECONDS"), 20)
 
     DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
     DISCORD_GUILD_ID = _as_int(os.getenv("DISCORD_GUILD_ID"), 0)

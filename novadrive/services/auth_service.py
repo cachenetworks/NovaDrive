@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import secrets
 from datetime import timedelta
 
 from sqlalchemy import func, or_
@@ -11,12 +12,15 @@ from novadrive.services.activity_service import ActivityService
 
 
 class AuthService:
+    API_KEY_PREFIX = "ndv_"
+
     @staticmethod
     def create_user(
         username: str,
         email: str,
         password: str,
         force_role: str | None = None,
+        email_verified: bool = False,
     ) -> User:
         normalized_username = username.strip()
         normalized_email = email.strip().lower()
@@ -31,6 +35,7 @@ class AuthService:
             username=normalized_username,
             email=normalized_email,
             role=role,
+            email_verified_at=utcnow() if email_verified else None,
         )
         user.set_password(password)
         db.session.add(user)
@@ -54,7 +59,7 @@ class AuthService:
         return user
 
     @staticmethod
-    def authenticate(login: str, password: str) -> User | None:
+    def authenticate(login: str, password: str, *, record_login: bool = True) -> User | None:
         identity = login.strip().lower()
         user = User.query.filter(
             or_(
@@ -63,10 +68,17 @@ class AuthService:
             )
         ).first()
         if user and user.check_password(password):
-            user.last_login_at = utcnow()
-            db.session.commit()
+            if record_login:
+                user.last_login_at = utcnow()
+                db.session.commit()
             return user
         return None
+
+    @staticmethod
+    def can_use_password_login(user: User, config) -> bool:
+        if not config["EMAIL_VERIFICATION_REQUIRED"]:
+            return True
+        return user.is_email_verified
 
     @staticmethod
     def ensure_user_session(
@@ -116,4 +128,104 @@ class AuthService:
     @staticmethod
     def find_by_email(email: str) -> User | None:
         return User.query.filter(func.lower(User.email) == email.lower()).first()
+
+    @staticmethod
+    def generate_api_key(user: User) -> str:
+        raw_key = f"{AuthService.API_KEY_PREFIX}{secrets.token_urlsafe(32)}"
+        user.api_key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+        user.api_key_last4 = raw_key[-4:]
+        user.api_key_created_at = utcnow()
+        db.session.commit()
+
+        ActivityService.log(
+            action="user.api_key.generated",
+            target_type="user",
+            target_id=user.id,
+            user_id=user.id,
+        )
+        return raw_key
+
+    @staticmethod
+    def ensure_api_key(user: User) -> str | None:
+        if user.has_api_key:
+            return None
+        return AuthService.generate_api_key(user)
+
+    @staticmethod
+    def revoke_api_key(user: User) -> None:
+        if not user.has_api_key:
+            return
+
+        user.api_key_hash = None
+        user.api_key_last4 = None
+        user.api_key_created_at = None
+        db.session.commit()
+
+        ActivityService.log(
+            action="user.api_key.revoked",
+            target_type="user",
+            target_id=user.id,
+            user_id=user.id,
+        )
+
+    @staticmethod
+    def authenticate_api_key(api_key: str | None) -> User | None:
+        candidate = (api_key or "").strip()
+        if not candidate:
+            return None
+        digest = hashlib.sha256(candidate.encode("utf-8")).hexdigest()
+        return User.query.filter_by(api_key_hash=digest).first()
+
+    @staticmethod
+    def mark_email_verified(user: User) -> User:
+        if user.is_email_verified:
+            return user
+
+        user.email_verified_at = utcnow()
+        db.session.commit()
+
+        ActivityService.log(
+            action="user.email_verified",
+            target_type="user",
+            target_id=user.id,
+            user_id=user.id,
+        )
+        return user
+
+    @staticmethod
+    def note_verification_email_sent(user: User) -> None:
+        user.email_verification_sent_at = utcnow()
+        db.session.commit()
+
+        ActivityService.log(
+            action="user.verification_email.sent",
+            target_type="user",
+            target_id=user.id,
+            user_id=user.id,
+        )
+
+    @staticmethod
+    def update_role(user: User, role: str, actor_id: int | None = None) -> User:
+        role_value = role.strip().lower()
+        if role_value not in {"admin", "user"}:
+            raise ValueError("Invalid role.")
+
+        if user.role == "admin" and role_value != "admin" and AuthService.count_admins() <= 1:
+            raise ValueError("At least one admin account must remain.")
+
+        user.role = role_value
+        db.session.commit()
+
+        ActivityService.log(
+            action="user.role.updated",
+            target_type="user",
+            target_id=user.id,
+            user_id=actor_id,
+            metadata={"role": role_value},
+        )
+        return user
+
+    @staticmethod
+    def count_admins() -> int:
+        return User.query.filter_by(role="admin").count()
 

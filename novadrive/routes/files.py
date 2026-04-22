@@ -9,13 +9,13 @@ from flask import (
     redirect,
     render_template,
     request,
-    send_file,
     url_for,
 )
 from flask_login import current_user, login_required
 
 from novadrive.forms import ShareLinkForm
 from novadrive.models import ShareLink
+from novadrive.services.file_delivery import FileDeliveryService
 from novadrive.services.file_service import AccessError, FileService
 from novadrive.services.share_service import ShareService
 from novadrive.utils.validators import ValidationError
@@ -92,6 +92,8 @@ def details(file_id: int):
         .order_by(ShareLink.created_at.desc())
         .all()
     )
+    preview_kind = FileDeliveryService.preview_kind(file_record)
+    text_preview = FileDeliveryService.get_text_preview(file_record, current_app.config)
     return render_template(
         "dashboard/file_details.html",
         file=file_record,
@@ -99,6 +101,8 @@ def details(file_id: int):
         share_links=share_links,
         breadcrumbs=FileService.build_breadcrumbs(file_record.folder),
         folder_options=FileService.folder_options(current_user),
+        preview_kind=preview_kind,
+        text_preview=text_preview,
     )
 
 
@@ -107,13 +111,11 @@ def details(file_id: int):
 def download(file_id: int):
     try:
         file_record = FileService.get_file_or_404(current_user, file_id)
-        file_stream, _ = FileService.rebuild_file(file_record, current_app.config)
-        return send_file(
-            file_stream,
-            mimetype=file_record.mime_type,
+        return FileDeliveryService.build_response(
+            file_record,
+            current_app.config,
             as_attachment=True,
             download_name=file_record.filename,
-            max_age=0,
         )
     except LookupError:
         abort(404)
@@ -122,6 +124,23 @@ def download(file_id: int):
     except Exception as exc:
         flash(str(exc), "error")
         return redirect(url_for("dashboard.index", folder_id=request.args.get("folder_id", type=int)))
+
+
+@files_bp.route("/<int:file_id>/raw")
+@login_required
+def raw(file_id: int):
+    try:
+        file_record = FileService.get_file_or_404(current_user, file_id)
+        return FileDeliveryService.build_response(
+            file_record,
+            current_app.config,
+            as_attachment=False,
+            download_name=file_record.filename,
+        )
+    except LookupError:
+        abort(404)
+    except AccessError:
+        abort(403)
 
 
 @files_bp.route("/<int:file_id>/rename", methods=["POST"])
