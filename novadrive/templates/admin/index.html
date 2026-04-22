@@ -21,18 +21,22 @@
     </div>
   </section>
 
-  <section class="grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">
+  <section class="grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
     <div class="space-y-6">
       <div class="nova-panel p-6">
         <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">Health</p>
-        <h2 class="mt-2 text-2xl font-semibold text-white">Discord storage bridge</h2>
+        <h2 class="mt-2 text-2xl font-semibold text-white">{{ storage_backend_label }} backend</h2>
         <div class="mt-5 rounded-3xl border {% if storage_health.ok %}border-emerald-400/20 bg-emerald-500/10{% else %}border-rose-400/20 bg-rose-500/10{% endif %} p-5">
           <p class="text-sm font-semibold {% if storage_health.ok %}text-emerald-100{% else %}text-rose-100{% endif %}">
             {% if storage_health.ok %}Operational{% else %}Unavailable{% endif %}
           </p>
           <p class="mt-2 text-sm text-slate-300">
             {% if storage_health.ok %}
-              {{ storage_health.bot_user }} connected to guild {{ storage_health.guild_name or storage_health.guild_id }}.
+              {% if storage_backend_name == "s3" %}
+                Bucket {{ storage_health.bucket_name }} is reachable through {{ storage_health.endpoint_url }}.
+              {% else %}
+                {{ storage_health.bot_user }} connected to guild {{ storage_health.guild_name or storage_health.guild_id }}.
+              {% endif %}
             {% else %}
               {{ storage_health.error }}
             {% endif %}
@@ -41,7 +45,7 @@
         <div class="mt-5 space-y-3">
           {% for channel in storage_health.channels or [] %}
             <div class="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
-              <span class="text-slate-300">#{{ channel.name }}</span>
+              <span class="text-slate-300">{{ channel.name }}</span>
               <span class="{% if channel.resolved %}text-emerald-300{% else %}text-rose-300{% endif %}">{{ "resolved" if channel.resolved else "unresolved" }}</span>
             </div>
           {% endfor %}
@@ -51,15 +55,58 @@
       <div class="nova-panel p-6">
         <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Config Snapshot</p>
         <div class="mt-5 space-y-3 text-sm">
+          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Storage backend: <span class="text-white">{{ storage_backend_label }}</span></div>
+          {% for row in storage_config_rows %}
+            <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">{{ row.label }}: <span class="text-white">{{ row.value }}</span></div>
+          {% endfor %}
           <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Public sharing: <span class="text-white">{{ "enabled" if config_snapshot.allow_public_sharing else "disabled" }}</span></div>
           <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">WebDAV: <span class="text-white">{{ "enabled" if config_snapshot.webdav_enabled else "disabled" }}</span></div>
           <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Email verification: <span class="text-white">{{ "required" if config_snapshot.email_verification_required else "optional" }}</span></div>
           <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">SMTP: <span class="text-white">{{ "configured" if config_snapshot.smtp_enabled else "not configured" }}</span></div>
           <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Admin accounts: <span class="text-white">{{ config_snapshot.admin_count }}</span></div>
+          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Default user quota: <span class="text-white">{% if config_snapshot.default_user_storage_quota > 0 %}{{ config_snapshot.default_user_storage_quota|filesize }}{% else %}Unlimited{% endif %}</span></div>
+          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Default admin quota: <span class="text-white">{% if config_snapshot.default_admin_storage_quota > 0 %}{{ config_snapshot.default_admin_storage_quota|filesize }}{% else %}Unlimited{% endif %}</span></div>
           <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Chunk size: <span class="text-white">{{ config_snapshot.chunk_size|filesize }}</span></div>
-          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Bridge URL: <span class="text-white">{{ config_snapshot.bridge_url }}</span></div>
-          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Channels: <span class="text-white">{{ config_snapshot.channels|join(', ') if config_snapshot.channels else 'None configured' }}</span></div>
         </div>
+      </div>
+
+      <div class="nova-panel p-6">
+        <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">Create Account</p>
+        <h2 class="mt-2 text-2xl font-semibold text-white">Provision a user directly</h2>
+        <p class="mt-2 text-sm leading-7 text-slate-400">Set the role, initial quota, and verification state up front. Leave quota blank to apply the role default from the environment.</p>
+        <form action="{{ url_for('admin.create_user') }}" method="post" class="mt-5 grid gap-4 md:grid-cols-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Username</label>
+            <input type="text" name="username" class="nova-input" required>
+          </div>
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Email</label>
+            <input type="email" name="email" class="nova-input" required>
+          </div>
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Password</label>
+            <input type="password" name="password" class="nova-input" required>
+          </div>
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Role</label>
+            <select name="role" class="nova-input">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Quota in GB</label>
+            <input type="number" name="storage_quota_gb" min="0" step="0.1" placeholder="Leave blank for default" class="nova-input">
+          </div>
+          <label class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+            <input type="checkbox" name="email_verified" class="h-4 w-4 rounded border-white/20 bg-transparent text-fuchsia-500">
+            Mark this account as already verified
+          </label>
+          <div class="md:col-span-2">
+            <button type="submit" class="nova-button-primary w-full">Create Account</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -68,6 +115,7 @@
         <div class="border-b border-white/10 px-6 py-4">
           <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Users</p>
           <h2 class="mt-2 text-2xl font-semibold text-white">Workspace members</h2>
+          <p class="mt-2 text-sm text-slate-400">Quick role and quota controls stay here. Use `Open Workspace` for full user administration, profile edits, and file control.</p>
         </div>
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-white/10 text-sm">
@@ -76,6 +124,7 @@
                 <th class="px-6 py-4">User</th>
                 <th class="px-6 py-4">Role</th>
                 <th class="px-6 py-4">Email</th>
+                <th class="px-6 py-4">Storage</th>
                 <th class="px-6 py-4">Joined</th>
                 <th class="px-6 py-4">Last login</th>
                 <th class="px-6 py-4 text-right">Actions</th>
@@ -86,23 +135,42 @@
                 <tr>
                   <td class="px-6 py-4">
                     <p class="font-medium text-white">{{ user.username }}</p>
+                    <p class="mt-1 text-xs text-slate-500">ID {{ user.id }}</p>
                   </td>
                   <td class="px-6 py-4 text-slate-300">{{ user.role|title }}</td>
                   <td class="px-6 py-4">
                     <p class="text-slate-300">{{ user.email }}</p>
                     <p class="mt-1 text-xs {% if user.is_email_verified %}text-emerald-300{% else %}text-amber-300{% endif %}">{{ "verified" if user.is_email_verified else "pending verification" }}</p>
                   </td>
+                  <td class="px-6 py-4">
+                    <p class="text-slate-300">{{ user_usage_by_id.get(user.id, 0)|filesize }} used</p>
+                    <p class="mt-1 text-xs text-slate-500">
+                      {% if user.storage_quota_bytes > 0 %}
+                        quota {{ user.storage_quota_bytes|filesize }}
+                      {% else %}
+                        quota unlimited
+                      {% endif %}
+                    </p>
+                  </td>
                   <td class="px-6 py-4 text-slate-300">{{ user.created_at|datetime }}</td>
                   <td class="px-6 py-4 text-slate-300">{{ user.last_login_at|datetime }}</td>
                   <td class="px-6 py-4">
-                    <form action="{{ url_for('admin.update_user_role', user_id=user.id) }}" method="post" class="flex items-center justify-end gap-2">
-                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                      <select name="role" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
-                        <option value="user" {% if user.role == 'user' %}selected{% endif %}>User</option>
-                        <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
-                      </select>
-                      <button type="submit" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Save</button>
-                    </form>
+                    <div class="flex flex-col items-end gap-2">
+                      <a href="{{ url_for('admin.user_details', user_id=user.id) }}" class="rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/10 px-3 py-2 text-xs font-medium text-fuchsia-100 transition hover:bg-fuchsia-500/20">Open Workspace</a>
+                      <form action="{{ url_for('admin.update_user_role', user_id=user.id) }}" method="post" class="flex items-center justify-end gap-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <select name="role" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
+                          <option value="user" {% if user.role == 'user' %}selected{% endif %}>User</option>
+                          <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                        </select>
+                        <button type="submit" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Save Role</button>
+                      </form>
+                      <form action="{{ url_for('admin.update_user_quota', user_id=user.id) }}" method="post" class="flex items-center justify-end gap-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="number" name="storage_quota_gb" min="0" step="0.1" value="{{ '0' if user.storage_quota_bytes <= 0 else '%.2f'|format(user.storage_quota_bytes / 1073741824) }}" class="w-28 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
+                        <button type="submit" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Save Quota</button>
+                      </form>
+                    </div>
                   </td>
                 </tr>
               {% endfor %}

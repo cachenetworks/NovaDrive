@@ -35,6 +35,14 @@ class Config:
     MAX_CONTENT_LENGTH = MAX_UPLOAD_SIZE_BYTES
     SPOOL_MAX_MEMORY_BYTES = _as_int(os.getenv("SPOOL_MAX_MEMORY_BYTES"), 8_388_608)
     TEXT_PREVIEW_MAX_BYTES = _as_int(os.getenv("TEXT_PREVIEW_MAX_BYTES"), 1_048_576)
+    DEFAULT_USER_STORAGE_QUOTA_BYTES = _as_int(
+        os.getenv("DEFAULT_USER_STORAGE_QUOTA_BYTES"),
+        10 * 1024 * 1024 * 1024,
+    )
+    DEFAULT_ADMIN_STORAGE_QUOTA_BYTES = _as_int(
+        os.getenv("DEFAULT_ADMIN_STORAGE_QUOTA_BYTES"),
+        0,
+    )
 
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
@@ -51,6 +59,15 @@ class Config:
     SOFT_DELETE_ENABLED = _as_bool(os.getenv("SOFT_DELETE_ENABLED"), True)
     WEBDAV_ENABLED = _as_bool(os.getenv("WEBDAV_ENABLED"), True)
     WEBDAV_REALM = os.getenv("WEBDAV_REALM", "NovaDrive WebDAV")
+    S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", "").strip()
+    S3_REGION = os.getenv("S3_REGION", "").strip()
+    S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID", "").strip()
+    S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY", "").strip()
+    S3_SESSION_TOKEN = os.getenv("S3_SESSION_TOKEN", "").strip()
+    S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "").strip()
+    S3_PREFIX = os.getenv("S3_PREFIX", "novadrive").strip().strip("/")
+    S3_FORCE_PATH_STYLE = _as_bool(os.getenv("S3_FORCE_PATH_STYLE"), True)
+    S3_PRESIGN_TTL_SECONDS = _as_int(os.getenv("S3_PRESIGN_TTL_SECONDS"), 900)
 
     EMAIL_VERIFICATION_REQUIRED = _as_bool(
         os.getenv("EMAIL_VERIFICATION_REQUIRED"),

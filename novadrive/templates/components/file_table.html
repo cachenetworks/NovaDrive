@@ -33,7 +33,7 @@
               <form action="{{ url_for('files.delete', file_id=file.id) }}" method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="folder_id" value="{{ current_folder.id }}">
-                <button type="submit" class="rounded-xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-100 transition hover:bg-rose-500/20" data-confirm-submit data-confirm-title="Delete {{ file.filename }}?" data-confirm-body="The file will be removed from your NovaDrive index and Discord chunk references.">Delete</button>
+                <button type="submit" class="rounded-xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-100 transition hover:bg-rose-500/20" data-confirm-submit data-confirm-title="Delete {{ file.filename }}?" data-confirm-body="The file will be removed from your NovaDrive index and stored chunk references.">Delete</button>
               </form>
             </div>
           </td>

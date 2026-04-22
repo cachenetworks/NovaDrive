@@ -29,6 +29,7 @@ class User(UserMixin, TimestampMixin, db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(16), nullable=False, default="user", index=True)
+    storage_quota_bytes = db.Column(db.BigInteger, nullable=False, default=0)
     last_login_at = db.Column(db.DateTime(timezone=True), nullable=True)
     email_verified_at = db.Column(db.DateTime(timezone=True), nullable=True)
     email_verification_sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
@@ -52,6 +53,10 @@ class User(UserMixin, TimestampMixin, db.Model):
     @property
     def is_email_verified(self) -> bool:
         return self.email_verified_at is not None
+
+    @property
+    def has_storage_quota(self) -> bool:
+        return int(self.storage_quota_bytes or 0) > 0
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)

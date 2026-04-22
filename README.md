@@ -1,8 +1,8 @@
 # NovaDrive
 
-**NovaDrive** is a Google Drive inspired web app that uses **Discord as the storage backend**.
+**NovaDrive** is a Google Drive inspired web app that supports **Discord or S3-compatible object storage as the backend**.
 
-Instead of pushing uploads to S3 or saving them permanently on local disk, NovaDrive buffers incoming files temporarily, splits them into Discord-safe chunks, uploads those chunks through a `discord.py` bot bridge, and stores the full manifest in SQLite for download, verification, search, sharing, and administration.
+NovaDrive buffers incoming files temporarily, splits them into verified chunks, writes those chunks through the active storage backend, and stores the full manifest in SQLite for download, verification, search, sharing, WebDAV access, and administration.
 
 It is designed as a **real, production-structured MVP**, not a throwaway demo.
 
@@ -10,7 +10,7 @@ It is designed as a **real, production-structured MVP**, not a throwaway demo.
 
 NovaDrive explores a fun but serious architectural idea:
 
-- Use Discord channels as the durable blob store
+- Use Discord channels or an S3-compatible bucket as the durable blob store
 - Use Flask + SQLAlchemy as the control plane
 - Use SQLite for metadata, indexing, manifests, and auditability
 - Keep uploads verifiable with SHA256 at both chunk and file level
@@ -24,13 +24,16 @@ This repo gives you a clean base to keep building from.
 - Automatic first-user admin bootstrap
 - Optional SMTP-backed email verification for account activation
 - WebDAV support for direct upload, download, folder creation, delete, and move from desktop/mobile clients
+- S3-compatible storage mode for AWS S3, MinIO, and other compatible providers
+- Per-user storage quotas with a 10 GB default cap for standard users and admin overrides from the admin console
+- Expanded admin console with account creation, role/profile/quota controls, and direct user-drive management
 - Nested folders with ownership-aware create, move, rename, and delete flows
 - File upload, rename, move, soft delete, hard delete, and verified download
 - ShareX-compatible file, image, and text uploads with per-user API keys and generated `.sxcu` config
-- Discord chunk manifests stored in SQLite with message IDs, channel IDs, URLs, and checksums
+- Chunk manifests stored in SQLite with backend references, locators, and checksums
 - Share links with optional expiry, inline media playback, raw links, and text file rendering
 - Search, filtering, recent activity, storage usage summaries, and admin health visibility
-- Modular service layer with a storage abstraction so Discord can be swapped later
+- Pluggable storage backend abstraction for Discord or S3-compatible providers
 - Docker and Docker Compose support plus a GitHub Actions image build workflow
 - Dark premium UI with Tailwind, Jinja, glassmorphism panels, and polished dashboard flows
 
@@ -41,7 +44,7 @@ This repo gives you a clean base to keep building from.
 - **Database:** SQLite with SQLAlchemy
 - **Migrations:** Flask-Migrate / Alembic
 - **Auth:** Flask-Login + Flask-WTF + Werkzeug password hashing
-- **Discord integration:** `discord.py` bot with a local HTTP bridge
+- **Object storage:** Discord bot bridge or S3-compatible storage
 - **Frontend:** Jinja2 templates + Tailwind CSS + a small amount of vanilla JavaScript
 
 ## Architecture at a glance
@@ -62,20 +65,19 @@ flowchart LR
 1. A user uploads a file through the web UI.
 2. Flask buffers the file temporarily in a spooled temp file.
 3. NovaDrive computes the full-file SHA256 while streaming the upload.
-4. The file is split into chunks smaller than the configured Discord attachment threshold.
-5. Each chunk is sent to the Discord bot bridge.
-6. The bot uploads the chunk as a Discord attachment into a configured storage channel.
-7. NovaDrive stores the returned Discord message IDs, channel IDs, attachment URLs, chunk checksums, and manifest metadata in SQLite.
+4. The file is split into chunks according to the configured chunk size.
+5. Each chunk is sent to the active storage backend.
+6. NovaDrive stores the returned backend references, locators, chunk checksums, and manifest metadata in SQLite.
 8. On download, NovaDrive fetches the chunks back in order, verifies each chunk hash, rebuilds the file, verifies the final SHA256, and serves the file to the client.
 
 ## Why there are two processes
 
-NovaDrive intentionally separates the web app and the Discord bot:
+When `STORAGE_BACKEND=discord`, NovaDrive intentionally separates the web app and the Discord bot:
 
 - The **Flask app** owns HTTP requests, sessions, forms, templates, and database writes.
 - The **Discord bot** owns Discord connectivity, attachment uploads, message fetches, and deletion.
 
-That split keeps the codebase cleaner and avoids mixing Flask request handling with long-lived async Discord state. It also makes it easier to swap the bot bridge implementation later if you want to move to a queue, worker, or internal RPC layer.
+That split keeps the codebase cleaner and avoids mixing Flask request handling with long-lived async Discord state. When `STORAGE_BACKEND=s3`, the web app talks directly to the configured S3-compatible API instead.
 
 ## Project structure
 
@@ -121,11 +123,13 @@ README.md                 You are here
 - First registered user becomes admin
 - Optional email verification before password login and WebDAV access
 - Basic `admin` and `user` role model with admin role reassignment from the admin console
+- Default per-user storage caps with admin-adjustable per-account quota overrides
+- Admin-created accounts with controlled verification state and role assignment
 
 ### File management
 
-- Upload files into Discord-backed storage
-- Chunk files below Discord limits
+- Upload files into the active storage backend
+- Chunk files according to the configured storage chunk size
 - Persist chunk metadata in SQLite
 - Rebuild files in exact order
 - Validate chunk checksums and final file hash
@@ -165,10 +169,15 @@ README.md                 You are here
 ### Admin surface
 
 - User list
+- Direct account creation from the admin console
 - File, folder, and storage totals
 - Recent activity log
-- Discord bot bridge health snapshot
+- Storage backend health snapshot
 - Storage config visibility
+- User role management
+- Per-user storage quota management
+- User profile editing, password resets, verification toggles, and direct workspace browsing
+- Admin-side file and folder deletion inside a selected user's drive
 
 ## Quick start
 
@@ -226,10 +235,9 @@ Copy-Item .env.example .env
 At minimum, set:
 
 - `SECRET_KEY`
-- `DISCORD_BOT_TOKEN`
-- `DISCORD_GUILD_ID`
-- `DISCORD_STORAGE_CHANNEL_IDS`
-- `DISCORD_BOT_BRIDGE_SHARED_SECRET`
+- `STORAGE_BACKEND`
+- If using Discord: `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, `DISCORD_STORAGE_CHANNEL_IDS`, and `DISCORD_BOT_BRIDGE_SHARED_SECRET`
+- If using S3: `S3_BUCKET_NAME`, `S3_ACCESS_KEY_ID`, and `S3_SECRET_ACCESS_KEY`
 
 ### 5. Initialize the database
 
@@ -308,10 +316,22 @@ Recommended bot permissions:
 | `MAX_UPLOAD_SIZE_BYTES` | Max allowed file size through Flask | `536870912` |
 | `SPOOL_MAX_MEMORY_BYTES` | Max in-memory temp spool before disk spill | `8388608` |
 | `TEXT_PREVIEW_MAX_BYTES` | Max text bytes rendered inline on preview pages | `1048576` |
+| `DEFAULT_USER_STORAGE_QUOTA_BYTES` | Default storage cap applied to new non-admin users | `10737418240` |
+| `DEFAULT_ADMIN_STORAGE_QUOTA_BYTES` | Default storage cap applied to new admin users, `0` for unlimited | `0` |
+| `STORAGE_BACKEND` | Primary blob backend, `discord` or `s3` | `s3` |
 | `ALLOW_PUBLIC_SHARING` | Enables share link generation | `true` |
 | `SOFT_DELETE_ENABLED` | Keeps deleted items out of active view by default | `true` |
 | `WEBDAV_ENABLED` | Enables the built-in WebDAV endpoint | `true` |
 | `WEBDAV_REALM` | HTTP auth realm shown to WebDAV clients | `NovaDrive WebDAV` |
+| `S3_ENDPOINT_URL` | Optional custom S3 endpoint for MinIO or self-hosted APIs | `https://minio.example.com` |
+| `S3_REGION` | S3 region name | `us-east-1` |
+| `S3_ACCESS_KEY_ID` | S3 access key ID | `...` |
+| `S3_SECRET_ACCESS_KEY` | S3 secret access key | `...` |
+| `S3_SESSION_TOKEN` | Optional temporary session token | `...` |
+| `S3_BUCKET_NAME` | Bucket used for NovaDrive chunk objects | `novadrive-prod` |
+| `S3_PREFIX` | Optional object key prefix under the bucket | `novadrive` |
+| `S3_FORCE_PATH_STYLE` | Force path-style requests for MinIO/self-hosted setups | `true` |
+| `S3_PRESIGN_TTL_SECONDS` | Reserved S3 URL lifetime setting for future integrations | `900` |
 | `EMAIL_VERIFICATION_REQUIRED` | Require email confirmation before password login | `true` |
 | `EMAIL_VERIFICATION_MAX_AGE_SECONDS` | Verification link lifetime | `86400` |
 | `EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS` | Minimum resend interval | `60` |
@@ -377,10 +397,11 @@ Notes:
 - WebDAV only exposes the authenticated user's own drive.
 - Admins still get their own drive over WebDAV, not the full global admin scope.
 - If email verification is required, the account must be verified before WebDAV login works.
+- If the account reaches its storage quota, WebDAV uploads are blocked until an admin raises the limit or files are deleted.
 
 ## Storage model details
 
-NovaDrive stores **metadata in SQLite** and **binary chunks in Discord**.
+NovaDrive stores **metadata in SQLite** and **binary chunks in the active storage backend**.
 
 ### Database records
 
@@ -410,10 +431,10 @@ The application tracks:
 ### What gets stored for each chunk
 
 - Chunk index
-- Discord channel ID
-- Discord message ID
-- Discord attachment URL
-- Attachment filename
+- Backend target identifier
+- Backend object reference
+- Stored locator URL or URI
+- Attachment/object filename
 - Chunk size
 - Chunk SHA256
 
@@ -430,6 +451,7 @@ NovaDrive already includes a solid MVP baseline:
 - Share links can be disabled globally or set to expire
 - API keys are stored as SHA256 hashes, not plaintext
 - Verification links are signed and time-limited
+- Per-user storage quotas are enforced across browser uploads, ShareX, and WebDAV
 
 That said, if you push beyond local or small-team usage, you should still add:
 
@@ -544,6 +566,15 @@ Also confirm that:
 - `DISCORD_BOT_BRIDGE_SHARED_SECRET` matches in both processes
 - your firewall is not blocking the local port
 
+### S3 mode cannot connect
+
+Check:
+
+- `STORAGE_BACKEND=s3`
+- `S3_BUCKET_NAME` exists and the credentials can read/write it
+- `S3_ENDPOINT_URL` is correct for MinIO or other self-hosted providers
+- `S3_FORCE_PATH_STYLE=true` if your provider expects path-style requests
+
 ### Uploads fail immediately
 
 Check:
@@ -574,10 +605,11 @@ npm run build:css
 
 - Upload resume support is only partial right now. The service layer is manifest-aware, but the browser upload flow is still a single request and not fully resumable across restarts.
 - Shared downloads rebuild files on demand, which can use temporary memory or disk buffering for large files.
-- Inline previews still rebuild files from Discord-backed chunks on demand, so very large media is functional but not as efficient as a dedicated streaming backend.
+- Inline previews still rebuild files from stored chunks on demand, so very large media is functional but not as efficient as a dedicated streaming backend.
 - WebDAV is intentionally lightweight and focuses on common client flows rather than the full Nextcloud protocol surface such as locking, versioning, comments, and sync metadata.
-- The bot bridge is intentionally simple for local development and MVP use. Larger deployments should put a stronger internal service boundary in front of Discord I/O.
-- The admin surface now supports role changes, but it is still not a full in-app configuration editor.
+- The Discord bot bridge is intentionally simple for local development and MVP use. Larger deployments should put a stronger internal service boundary in front of Discord I/O.
+- The admin surface now handles account creation, profile updates, quotas, and direct user-drive management, but it is still not a full in-app configuration editor.
+- S3 support currently acts as the primary backend for NovaDrive storage. Full per-user external bucket mounting like Nextcloud external storage is still a future step.
 - SQLite is a good MVP default, but PostgreSQL is the right next step for multi-user concurrency and heavier production workloads.
 
 ## Suggested next steps
@@ -585,6 +617,7 @@ npm run build:css
 - Add resumable browser uploads with persisted client-side upload sessions
 - Move long-running chunk operations into background jobs
 - Add app passwords or per-device WebDAV credentials instead of reusing the main password
+- Add storage policies for paid tiers, group quotas, and delegated admin scopes
 - Add PDF/document-specific preview flows and syntax highlighting for code/text
 - Add recycle bin restore flows and bulk actions
 - Add team/org permissions and deeper audit trails

@@ -100,9 +100,12 @@ def details(file_id: int):
         share_form=share_form,
         share_links=share_links,
         breadcrumbs=FileService.build_breadcrumbs(file_record.folder),
-        folder_options=FileService.folder_options(current_user),
+        folder_options=FileService.folder_options(current_user, owner=file_record.owner),
         preview_kind=preview_kind,
         text_preview=text_preview,
+        admin_target_user=file_record.owner
+        if current_user.is_admin and file_record.owner_id != current_user.id
+        else None,
     )
 
 
@@ -160,6 +163,7 @@ def rename(file_id: int):
 @files_bp.route("/<int:file_id>/move", methods=["POST"])
 @login_required
 def move(file_id: int):
+    admin_user_id = request.form.get("admin_user_id", type=int)
     try:
         file_record = FileService.get_file_or_404(current_user, file_id)
         destination_folder = FileService.get_folder_or_404(
@@ -168,6 +172,14 @@ def move(file_id: int):
         )
         FileService.move_file(current_user, file_record, destination_folder)
         flash("File moved.", "success")
+        if admin_user_id:
+            return redirect(
+                url_for(
+                    "admin.user_details",
+                    user_id=admin_user_id,
+                    folder_id=destination_folder.id,
+                )
+            )
         return redirect(url_for("dashboard.index", folder_id=destination_folder.id))
     except (LookupError, AccessError):
         flash("Unable to move that file.", "error")
@@ -180,6 +192,7 @@ def move(file_id: int):
 @login_required
 def delete(file_id: int):
     redirect_folder_id = request.form.get("folder_id", type=int)
+    admin_user_id = request.form.get("admin_user_id", type=int)
     hard_delete = request.form.get("hard_delete") == "true"
     try:
         file_record = FileService.get_file_or_404(current_user, file_id)
@@ -187,6 +200,14 @@ def delete(file_id: int):
         flash("File deleted.", "success")
     except (LookupError, AccessError):
         flash("File not found.", "error")
+    if admin_user_id:
+        return redirect(
+            url_for(
+                "admin.user_details",
+                user_id=admin_user_id,
+                folder_id=redirect_folder_id,
+            )
+        )
     return redirect(
         url_for("dashboard.index", folder_id=redirect_folder_id)
         if redirect_folder_id

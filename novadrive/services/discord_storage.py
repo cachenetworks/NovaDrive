@@ -10,13 +10,10 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from novadrive.services.storage_base import StorageBackendError
 from novadrive.utils.logging import structured_log
 
 logger = logging.getLogger(__name__)
-
-
-class StorageBackendError(RuntimeError):
-    pass
 
 
 class DiscordStorageBackend:

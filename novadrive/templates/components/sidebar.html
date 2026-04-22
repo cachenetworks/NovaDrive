@@ -7,7 +7,7 @@
     </div>
     <div>
       <div class="font-display text-lg font-bold tracking-tight text-white">NovaDrive</div>
-      <div class="text-xs text-slate-400">Discord-backed cloud storage</div>
+      <div class="text-xs text-slate-400">{{ configured_storage_backend_label }}-backed cloud storage</div>
     </div>
   </a>
 
@@ -41,14 +41,22 @@
         <p class="mt-2 text-2xl font-semibold text-white">{{ (sidebar_usage.total_used if sidebar_usage else 0)|filesize }}</p>
       </div>
       <div class="rounded-full border border-fuchsia-400/30 bg-fuchsia-400/10 px-3 py-1 text-sm font-medium text-fuchsia-200">
-        {{ sidebar_usage.percent_used if sidebar_usage else 0 }}%
+        {% if sidebar_usage and sidebar_usage.is_unlimited %}
+          Unlimited
+        {% else %}
+          {{ sidebar_usage.percent_used if sidebar_usage else 0 }}%
+        {% endif %}
       </div>
     </div>
     <div class="mt-4 h-2 rounded-full bg-white/10">
-      <div class="h-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-violet-500" style="width: {{ sidebar_usage.percent_used if sidebar_usage else 0 }}%"></div>
+      <div class="h-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-violet-500" style="width: {{ 100 if sidebar_usage and sidebar_usage.is_unlimited else (sidebar_usage.percent_used if sidebar_usage else 0) }}%"></div>
     </div>
     <p class="mt-3 text-xs leading-5 text-slate-400">
-      Total library footprint against the local soft-limit envelope.
+      {% if sidebar_usage and sidebar_usage.is_unlimited %}
+        No account storage cap is applied to this drive.
+      {% else %}
+        {{ (sidebar_usage.remaining_bytes if sidebar_usage else 0)|filesize }} remaining out of {{ (sidebar_usage.quota_bytes if sidebar_usage else 0)|filesize }}.
+      {% endif %}
     </p>
   </div>
 

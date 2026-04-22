@@ -15,7 +15,11 @@ from novadrive.extensions import db
 from novadrive.models import File, FileChunk, FileManifest, Folder, User, utcnow
 from novadrive.services.activity_service import ActivityService
 from novadrive.services.auth_service import AuthService
-from novadrive.services.discord_storage import DiscordStorageBackend, StorageBackendError
+from novadrive.services.storage_base import StorageBackendError
+from novadrive.services.storage_factory import (
+    configured_storage_backend_name,
+    get_storage_backend,
+)
 from novadrive.utils.chunking import ChunkValidationError, iter_file_chunks, validate_chunk_indexes
 from novadrive.utils.hashing import sha256_bytes
 from novadrive.utils.validators import ValidationError, normalize_filename, validate_folder_name
@@ -29,8 +33,20 @@ class AccessError(PermissionError):
 
 class FileService:
     @staticmethod
-    def get_accessible_root_folder(user: User) -> Folder:
-        return AuthService.get_root_folder(user)
+    def current_usage_bytes(user: User) -> int:
+        usage_query = db.session.query(func.coalesce(func.sum(File.total_size), 0)).filter(
+            File.owner_id == user.id,
+            File.upload_status == "complete",
+            File.deleted_at.is_(None),
+        )
+        return int(usage_query.scalar() or 0)
+
+    @staticmethod
+    def get_accessible_root_folder(user: User, owner: User | None = None) -> Folder:
+        target_owner = owner or user
+        if not user.is_admin and target_owner.id != user.id:
+            raise AccessError("You do not have access to that drive.")
+        return AuthService.get_root_folder(target_owner)
 
     @staticmethod
     def get_folder_or_404(user: User, folder_id: int) -> Folder:
@@ -62,8 +78,12 @@ class FileService:
         return list(reversed(breadcrumbs))
 
     @staticmethod
-    def folder_options(user: User, exclude_folder_id: int | None = None) -> list[tuple[int, str]]:
-        root = FileService.get_accessible_root_folder(user)
+    def folder_options(
+        user: User,
+        exclude_folder_id: int | None = None,
+        owner: User | None = None,
+    ) -> list[tuple[int, str]]:
+        root = FileService.get_accessible_root_folder(user, owner=owner)
         options: list[tuple[int, str]] = []
 
         def walk(node: Folder, depth: int) -> None:
@@ -84,8 +104,8 @@ class FileService:
         return options
 
     @staticmethod
-    def folder_tree(user: User) -> list[dict]:
-        root = FileService.get_accessible_root_folder(user)
+    def folder_tree(user: User, owner: User | None = None) -> list[dict]:
+        root = FileService.get_accessible_root_folder(user, owner=owner)
 
         def build(node: Folder) -> dict:
             children = (
@@ -140,32 +160,30 @@ class FileService:
         query = File.query.filter(
             File.upload_status == "complete",
             File.deleted_at.is_(None),
+            File.owner_id == user.id,
         )
-        if not user.is_admin:
-            query = query.filter(File.owner_id == user.id)
         return query.order_by(File.created_at.desc()).limit(limit).all()
 
     @staticmethod
-    def usage_summary(user: User) -> dict[str, int]:
-        usage_query = db.session.query(func.coalesce(func.sum(File.total_size), 0)).filter(
-            File.upload_status == "complete",
-            File.deleted_at.is_(None),
-        )
+    def usage_summary(user: User) -> dict[str, object]:
         file_count_query = db.session.query(func.count(File.id)).filter(
+            File.owner_id == user.id,
             File.upload_status == "complete",
             File.deleted_at.is_(None),
         )
-        if not user.is_admin:
-            usage_query = usage_query.filter(File.owner_id == user.id)
-            file_count_query = file_count_query.filter(File.owner_id == user.id)
-        total_used = int(usage_query.scalar() or 0)
+        total_used = FileService.current_usage_bytes(user)
         total_files = int(file_count_query.scalar() or 0)
-        soft_limit = current_app.config["MAX_UPLOAD_SIZE_BYTES"] * 10
-        percent = min(100, int((total_used / soft_limit) * 100)) if soft_limit else 0
+        quota_bytes = AuthService.storage_quota_bytes_for_user(user, config=current_app.config)
+        is_unlimited = quota_bytes <= 0
+        remaining_bytes = None if is_unlimited else max(quota_bytes - total_used, 0)
+        percent = min(100, int((total_used / quota_bytes) * 100)) if quota_bytes > 0 else 0
         return {
             "total_used": total_used,
             "total_files": total_files,
-            "soft_limit": soft_limit,
+            "quota_bytes": quota_bytes,
+            "remaining_bytes": remaining_bytes,
+            "is_unlimited": is_unlimited,
+            "can_upload": is_unlimited or (remaining_bytes or 0) > 0,
             "percent_used": percent,
         }
 
@@ -294,8 +312,14 @@ class FileService:
             digest.update(buffer)
             spool.write(buffer)
 
+        FileService._ensure_storage_quota(user, total_size, config, existing_file=existing_file)
         spool.seek(0)
-        backend = DiscordStorageBackend(config)
+        backend_name = (
+            existing_file.manifest.storage_backend
+            if existing_file and existing_file.manifest and existing_file.manifest.storage_backend
+            else configured_storage_backend_name(config)
+        )
+        backend = get_storage_backend(config, backend_name=backend_name)
         file_record = existing_file or File(
             folder_id=folder.id,
             owner_id=folder.owner_id,
@@ -312,7 +336,7 @@ class FileService:
 
         if not file_record.manifest:
             file_record.manifest = FileManifest(
-                storage_backend="discord",
+                storage_backend=backend_name,
                 chunk_size=chunk_size,
                 upload_session_token=secrets.token_urlsafe(18),
                 metadata_json=json.dumps(
@@ -402,7 +426,12 @@ class FileService:
             file_record.total_chunks,
         )
 
-        backend = DiscordStorageBackend(config)
+        backend_name = (
+            file_record.manifest.storage_backend
+            if file_record.manifest and file_record.manifest.storage_backend
+            else configured_storage_backend_name(config)
+        )
+        backend = get_storage_backend(config, backend_name=backend_name)
         output = tempfile.SpooledTemporaryFile(max_size=config["SPOOL_MAX_MEMORY_BYTES"], mode="w+b")
         digest = hashlib.sha256()
 
@@ -474,13 +503,18 @@ class FileService:
     @staticmethod
     def delete_file(user: User, file_record: File, hard_delete: bool = False) -> None:
         if hard_delete:
-            backend = DiscordStorageBackend(current_app.config)
+            backend_name = (
+                file_record.manifest.storage_backend
+                if file_record.manifest and file_record.manifest.storage_backend
+                else configured_storage_backend_name(current_app.config)
+            )
+            backend = get_storage_backend(current_app.config, backend_name=backend_name)
             for chunk in file_record.chunks:
                 try:
                     backend.delete_chunk(chunk.discord_channel_id, chunk.discord_message_id)
                 except StorageBackendError:
                     logger.warning(
-                        "Failed to delete Discord chunk %s for file %s",
+                        "Failed to delete stored chunk %s for file %s",
                         chunk.id,
                         file_record.id,
                     )
@@ -567,3 +601,42 @@ class FileService:
                 File.mime_type.like("application/%") | File.mime_type.like("text/%")
             )
         return query
+
+    @staticmethod
+    def _ensure_storage_quota(
+        user: User,
+        incoming_bytes: int,
+        config,
+        *,
+        existing_file: File | None = None,
+    ) -> None:
+        quota_bytes = AuthService.storage_quota_bytes_for_user(user, config=config)
+        if quota_bytes <= 0:
+            return
+
+        current_usage = FileService.current_usage_bytes(user)
+        if existing_file and existing_file.upload_status == "complete" and not existing_file.is_deleted:
+            current_usage = max(0, current_usage - existing_file.total_size)
+
+        projected_usage = current_usage + incoming_bytes
+        if projected_usage <= quota_bytes:
+            return
+
+        remaining_bytes = max(quota_bytes - current_usage, 0)
+        raise ValidationError(
+            "Storage quota exceeded. "
+            f"Remaining space: {FileService._format_bytes(remaining_bytes)} of "
+            f"{FileService._format_bytes(quota_bytes)}."
+        )
+
+    @staticmethod
+    def _format_bytes(value: int) -> str:
+        units = ["B", "KB", "MB", "GB", "TB"]
+        size = float(value)
+        for unit in units:
+            if size < 1024 or unit == units[-1]:
+                if unit == "B":
+                    return f"{int(size)} {unit}"
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{value} B"

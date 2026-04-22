@@ -14,7 +14,7 @@
         <div>
           <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">Current Workspace</p>
           <h2 class="mt-3 text-3xl font-semibold tracking-tight text-white">{{ current_folder.name }}</h2>
-          <p class="mt-3 max-w-2xl text-sm leading-7 text-slate-400">Browse folders, upload new files directly into Discord storage channels, and keep every manifest verified down to the chunk level.</p>
+          <p class="mt-3 max-w-2xl text-sm leading-7 text-slate-400">Browse folders, upload new files through the active {{ configured_storage_backend_label }} backend, and keep every manifest verified down to the chunk level.</p>
         </div>
         <div class="flex gap-3">
           <a href="#upload-zone" class="nova-button-secondary">Upload Files</a>
@@ -28,17 +28,36 @@
         <div>
           <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Usage</p>
           <h3 class="mt-3 text-3xl font-semibold text-white">{{ usage.total_used|filesize }}</h3>
-          <p class="mt-2 text-sm text-slate-400">{{ usage.total_files }} active files</p>
+          <p class="mt-2 text-sm text-slate-400">
+            {{ usage.total_files }} active files
+            {% if usage.is_unlimited %}
+              · Unlimited storage
+            {% else %}
+              · {{ usage.remaining_bytes|filesize }} remaining
+            {% endif %}
+          </p>
         </div>
         <div class="relative flex h-20 w-20 items-center justify-center rounded-full border border-fuchsia-400/20 bg-fuchsia-500/10">
           <div class="absolute inset-2 rounded-full border border-white/10"></div>
-          <span class="text-sm font-semibold text-fuchsia-100">{{ usage.percent_used }}%</span>
+          <span class="text-sm font-semibold text-fuchsia-100">
+            {% if usage.is_unlimited %}
+              inf
+            {% else %}
+              {{ usage.percent_used }}%
+            {% endif %}
+          </span>
         </div>
       </div>
       <div class="mt-6 h-3 rounded-full bg-white/10">
-        <div class="h-3 rounded-full bg-gradient-to-r from-fuchsia-500 to-violet-500" style="width: {{ usage.percent_used }}%"></div>
+        <div class="h-3 rounded-full bg-gradient-to-r from-fuchsia-500 to-violet-500" style="width: {{ 100 if usage.is_unlimited else usage.percent_used }}%"></div>
       </div>
-      <p class="mt-3 text-xs leading-6 text-slate-500">Soft limit reference: {{ usage.soft_limit|filesize }}</p>
+      <p class="mt-3 text-xs leading-6 text-slate-500">
+        {% if usage.is_unlimited %}
+          This account is not capped by a storage quota.
+        {% else %}
+          Account quota: {{ usage.quota_bytes|filesize }}
+        {% endif %}
+      </p>
     </div>
 
     <div class="nova-panel p-6">
@@ -111,7 +130,7 @@
           <div>
             <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">Upload Pipeline</p>
             <h3 class="mt-2 text-2xl font-semibold text-white">Drop files into NovaDrive</h3>
-            <p class="mt-2 text-sm text-slate-400">Uploads are temporarily buffered, chunked to Discord-safe sizes, and pushed through the bot bridge with per-chunk checksums.</p>
+            <p class="mt-2 text-sm text-slate-400">Uploads are temporarily buffered, chunked, and written through the active storage backend with per-chunk checksums.</p>
           </div>
           <div class="hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-right text-sm text-slate-400 xl:block">
             Chunk size<br>
@@ -133,8 +152,11 @@
           </div>
           <div class="mt-4 flex items-center justify-between gap-4">
             <p class="text-sm text-slate-400" data-upload-status>Select one or more files to begin.</p>
-            <button type="submit" class="nova-button-primary">Upload to Discord</button>
+            <button type="submit" class="nova-button-primary" {% if not usage.can_upload %}disabled{% endif %}>Upload to {{ configured_storage_backend_label }}</button>
           </div>
+          {% if not usage.can_upload %}
+            <p class="mt-3 text-sm text-amber-200">This account has reached its storage quota. Ask an admin to increase it before uploading more files.</p>
+          {% endif %}
         </form>
       </div>
 
@@ -193,7 +215,7 @@
           {% else %}
             <div class="rounded-[28px] border border-dashed border-white/10 bg-white/5 p-12 text-center">
               <p class="text-xl font-semibold text-white">Your library is quiet.</p>
-              <p class="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-400">Upload the first file into this folder and NovaDrive will chunk it, ship it to Discord, record the manifest in SQLite, and surface it here instantly.</p>
+              <p class="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-400">Upload the first file into this folder and NovaDrive will chunk it, push it through the active backend, record the manifest in SQLite, and surface it here instantly.</p>
             </div>
           {% endif %}
         </div>
@@ -320,10 +342,15 @@
 
       <div class="nova-panel p-5">
         <p class="text-xs uppercase tracking-[0.28em] text-slate-500">How It Works</p>
-        <h3 class="mt-2 text-2xl font-semibold text-white">Discord storage model</h3>
+        <h3 class="mt-2 text-2xl font-semibold text-white">{{ configured_storage_backend_label }} storage model</h3>
         <div class="mt-5 space-y-4 text-sm leading-7 text-slate-400">
-          <p>Uploads are buffered temporarily, hashed, chunked below the configured Discord attachment ceiling, and sent to the bot bridge.</p>
-          <p>Every chunk stores its Discord channel ID, message ID, attachment URL, size, and SHA256 in SQLite for indexed reconstruction.</p>
+          {% if configured_storage_backend == "discord" %}
+            <p>Uploads are buffered temporarily, hashed, chunked below the configured Discord attachment ceiling, and sent to the bot bridge.</p>
+            <p>Every chunk stores its Discord channel ID, message ID, attachment URL, size, and SHA256 in SQLite for indexed reconstruction.</p>
+          {% else %}
+            <p>Uploads are buffered temporarily, hashed, chunked into manifest entries, and written into the configured S3-compatible bucket.</p>
+            <p>Every chunk stores its bucket target, object key, locator, size, and SHA256 in SQLite for indexed reconstruction.</p>
+          {% endif %}
           <p>Downloads fetch chunks in exact sequence, validate each checksum, rebuild the file, and verify the final hash before serving it.</p>
         </div>
       </div>

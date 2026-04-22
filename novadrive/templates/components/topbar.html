@@ -2,6 +2,7 @@
   "dashboard.index": "My Drive",
   "files.details": "File Details",
   "admin.index": "Admin Console",
+  "admin.user_details": "Managed Workspace",
   "share.view": "Shared File"
 } %}
 <header class="fixed inset-x-0 top-0 z-20 border-b border-white/10 bg-black/30 backdrop-blur-2xl lg:left-72">
@@ -12,7 +13,7 @@
         <span class="font-display text-lg font-semibold tracking-tight text-white">NovaDrive</span>
       </div>
       <h1 class="mt-0 text-xl font-semibold tracking-tight text-white lg:text-2xl">{{ title_map.get(request.endpoint, app_name) }}</h1>
-      <p class="mt-1 text-sm text-slate-400">Premium Discord-native storage with chunk verification and a clean operations surface.</p>
+      <p class="mt-1 text-sm text-slate-400">Self-hosted cloud storage with verified chunks, admin controls, and a clean operations surface.</p>
     </div>
     <div class="flex items-center gap-3">
       {% if current_user.is_admin %}

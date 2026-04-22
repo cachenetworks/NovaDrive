@@ -4,6 +4,7 @@ import hashlib
 import secrets
 from datetime import timedelta
 
+from flask import current_app, has_app_context
 from sqlalchemy import func, or_
 
 from novadrive.extensions import db
@@ -15,12 +16,20 @@ class AuthService:
     API_KEY_PREFIX = "ndv_"
 
     @staticmethod
+    def normalize_role(role: str | None) -> str:
+        value = (role or "user").strip().lower()
+        if value not in {"admin", "user"}:
+            raise ValueError("Invalid role.")
+        return value
+
+    @staticmethod
     def create_user(
         username: str,
         email: str,
         password: str,
         force_role: str | None = None,
         email_verified: bool = False,
+        storage_quota_bytes: int | None = None,
     ) -> User:
         normalized_username = username.strip()
         normalized_email = email.strip().lower()
@@ -30,11 +39,18 @@ class AuthService:
         if AuthService.find_by_email(normalized_email):
             raise ValueError("That email is already in use.")
 
-        role = force_role or ("admin" if User.query.count() == 0 else "user")
+        role = (
+            AuthService.normalize_role(force_role)
+            if force_role is not None
+            else ("admin" if User.query.count() == 0 else "user")
+        )
         user = User(
             username=normalized_username,
             email=normalized_email,
             role=role,
+            storage_quota_bytes=storage_quota_bytes
+            if storage_quota_bytes is not None
+            else AuthService.default_storage_quota_bytes(role),
             email_verified_at=utcnow() if email_verified else None,
         )
         user.set_password(password)
@@ -206,9 +222,7 @@ class AuthService:
 
     @staticmethod
     def update_role(user: User, role: str, actor_id: int | None = None) -> User:
-        role_value = role.strip().lower()
-        if role_value not in {"admin", "user"}:
-            raise ValueError("Invalid role.")
+        role_value = AuthService.normalize_role(role)
 
         if user.role == "admin" and role_value != "admin" and AuthService.count_admins() <= 1:
             raise ValueError("At least one admin account must remain.")
@@ -226,6 +240,121 @@ class AuthService:
         return user
 
     @staticmethod
+    def update_user_profile(
+        user: User,
+        *,
+        username: str | None = None,
+        email: str | None = None,
+        password: str | None = None,
+        role: str | None = None,
+        email_verified: bool | None = None,
+        storage_quota_bytes: int | None = None,
+        actor_id: int | None = None,
+    ) -> User:
+        updates: dict[str, object] = {}
+
+        if username is not None:
+            normalized_username = username.strip()
+            if not normalized_username:
+                raise ValueError("Username is required.")
+            existing_user = AuthService.find_by_username(normalized_username)
+            if existing_user and existing_user.id != user.id:
+                raise ValueError("That username is already taken.")
+            if user.username != normalized_username:
+                user.username = normalized_username
+                updates["username"] = normalized_username
+
+        if email is not None:
+            normalized_email = email.strip().lower()
+            if not normalized_email:
+                raise ValueError("Email is required.")
+            existing_user = AuthService.find_by_email(normalized_email)
+            if existing_user and existing_user.id != user.id:
+                raise ValueError("That email is already in use.")
+            if user.email != normalized_email:
+                user.email = normalized_email
+                updates["email"] = normalized_email
+
+        if role is not None:
+            role_value = AuthService.normalize_role(role)
+            if user.role == "admin" and role_value != "admin" and AuthService.count_admins() <= 1:
+                raise ValueError("At least one admin account must remain.")
+            if user.role != role_value:
+                user.role = role_value
+                updates["role"] = role_value
+
+        if storage_quota_bytes is not None:
+            if storage_quota_bytes < 0:
+                raise ValueError("Storage quota must be zero or greater.")
+            normalized_quota = int(storage_quota_bytes)
+            if int(user.storage_quota_bytes or 0) != normalized_quota:
+                user.storage_quota_bytes = normalized_quota
+                updates["storage_quota_bytes"] = normalized_quota
+
+        if password is not None:
+            normalized_password = password.strip()
+            if not normalized_password:
+                raise ValueError("Password cannot be empty.")
+            user.set_password(normalized_password)
+            updates["password_reset"] = True
+
+        if email_verified is not None:
+            if email_verified and not user.is_email_verified:
+                user.email_verified_at = utcnow()
+                updates["email_verified"] = True
+            if not email_verified and user.is_email_verified:
+                user.email_verified_at = None
+                user.email_verification_sent_at = None
+                updates["email_verified"] = False
+
+        db.session.commit()
+
+        if updates:
+            ActivityService.log(
+                action="user.profile.updated",
+                target_type="user",
+                target_id=user.id,
+                user_id=actor_id,
+                metadata=updates,
+            )
+        return user
+
+    @staticmethod
     def count_admins() -> int:
         return User.query.filter_by(role="admin").count()
+
+    @staticmethod
+    def default_storage_quota_bytes(role: str, config=None) -> int:
+        resolved_config = config
+        if resolved_config is None and has_app_context():
+            resolved_config = current_app.config
+        if resolved_config is None:
+            return 0 if role == "admin" else 10 * 1024 * 1024 * 1024
+        if role == "admin":
+            return int(resolved_config["DEFAULT_ADMIN_STORAGE_QUOTA_BYTES"])
+        return int(resolved_config["DEFAULT_USER_STORAGE_QUOTA_BYTES"])
+
+    @staticmethod
+    def storage_quota_bytes_for_user(user: User, config=None) -> int:
+        configured_quota = user.storage_quota_bytes
+        if configured_quota is None:
+            return AuthService.default_storage_quota_bytes(user.role, config=config)
+        return int(configured_quota)
+
+    @staticmethod
+    def update_storage_quota(user: User, storage_quota_bytes: int, actor_id: int | None = None) -> User:
+        if storage_quota_bytes < 0:
+            raise ValueError("Storage quota must be zero or greater.")
+
+        user.storage_quota_bytes = int(storage_quota_bytes)
+        db.session.commit()
+
+        ActivityService.log(
+            action="user.storage_quota.updated",
+            target_type="user",
+            target_id=user.id,
+            user_id=actor_id,
+            metadata={"storage_quota_bytes": int(storage_quota_bytes)},
+        )
+        return user
 

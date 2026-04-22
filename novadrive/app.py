@@ -13,7 +13,11 @@ from novadrive.config import Config
 from novadrive.extensions import csrf, db, login_manager, migrate
 from novadrive.models import User
 from novadrive.services.auth_service import AuthService
-from novadrive.services.discord_storage import DiscordStorageBackend
+from novadrive.services.storage_factory import (
+    configured_storage_backend_name,
+    get_storage_backend,
+    storage_backend_label,
+)
 from novadrive.utils.logging import configure_logging
 
 load_dotenv()
@@ -102,11 +106,27 @@ def _ensure_runtime_schema(app: Flask) -> None:
             statements.append('ALTER TABLE "user" ADD COLUMN email_verified_at TIMESTAMP')
         if "email_verification_sent_at" not in user_columns:
             statements.append('ALTER TABLE "user" ADD COLUMN email_verification_sent_at TIMESTAMP')
+        if "storage_quota_bytes" not in user_columns:
+            statements.append('ALTER TABLE "user" ADD COLUMN storage_quota_bytes BIGINT')
         statements.append('CREATE INDEX IF NOT EXISTS ix_user_api_key_hash ON "user" (api_key_hash)')
 
         with db.engine.begin() as connection:
             for statement in statements:
                 connection.execute(text(statement))
+            connection.execute(
+                text(
+                    'UPDATE "user" '
+                    "SET storage_quota_bytes = CASE "
+                    "WHEN role = 'admin' THEN :admin_default "
+                    "ELSE :user_default "
+                    "END "
+                    "WHERE storage_quota_bytes IS NULL"
+                ),
+                {
+                    "admin_default": app.config["DEFAULT_ADMIN_STORAGE_QUOTA_BYTES"],
+                    "user_default": app.config["DEFAULT_USER_STORAGE_QUOTA_BYTES"],
+                },
+            )
 
 
 def _register_template_helpers(app: Flask) -> None:
@@ -145,6 +165,10 @@ def _register_template_helpers(app: Flask) -> None:
             "current_user_obj": current_user if current_user.is_authenticated else None,
             "sidebar_tree": sidebar_tree,
             "sidebar_usage": sidebar_usage,
+            "configured_storage_backend": configured_storage_backend_name(app.config),
+            "configured_storage_backend_label": storage_backend_label(
+                configured_storage_backend_name(app.config)
+            ),
         }
 
 
@@ -190,7 +214,7 @@ def _register_cli(app: Flask) -> None:
 
     @app.cli.command("storage-health")
     def storage_health_command():
-        """Check the Discord bot bridge health."""
-        backend = DiscordStorageBackend(app.config)
+        """Check the configured storage backend health."""
+        backend = get_storage_backend(app.config)
         result = backend.health_check()
         click.echo(result)

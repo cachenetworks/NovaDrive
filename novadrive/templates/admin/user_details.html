@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block title %}{{ target_user.username }} - Admin - NovaDrive{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <section class="nova-panel p-6">
+    <div class="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+      <div>
+        <div class="flex flex-wrap items-center gap-3 text-sm text-slate-400">
+          <a href="{{ url_for('admin.index') }}" class="transition hover:text-white">Admin</a>
+          <span>/</span>
+          <span class="text-white">{{ target_user.username }}</span>
+        </div>
+        <p class="mt-4 text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">Managed Workspace</p>
+        <h2 class="mt-3 text-3xl font-semibold tracking-tight text-white">{{ target_user.username }}</h2>
+        <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-400">Control this account's profile, quota, verification state, and file library from one admin surface. Storage usage is enforced against the user's own quota even when you manage their drive as an admin.</p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a href="{{ url_for('admin.index') }}" class="nova-button-secondary">Back to Admin</a>
+        <a href="{{ url_for('admin.user_details', user_id=target_user.id, folder_id=current_folder.id) }}" class="nova-button-primary">Refresh Workspace</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid gap-6 xl:grid-cols-[0.85fr,1.15fr]">
+    <div class="space-y-6">
+      <div class="nova-panel p-6">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Account</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">Profile and access</h3>
+          </div>
+          <span class="rounded-full border {% if target_user.is_email_verified %}border-emerald-400/20 bg-emerald-500/10 text-emerald-100{% else %}border-amber-400/20 bg-amber-500/10 text-amber-100{% endif %} px-3 py-1 text-xs">
+            {{ "Verified" if target_user.is_email_verified else "Pending verification" }}
+          </span>
+        </div>
+        <form action="{{ url_for('admin.update_user_profile', user_id=target_user.id) }}" method="post" class="mt-5 space-y-4">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Username</label>
+            <input type="text" name="username" value="{{ target_user.username }}" class="nova-input" required>
+          </div>
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Email</label>
+            <input type="email" name="email" value="{{ target_user.email }}" class="nova-input" required>
+          </div>
+          <div class="grid gap-4 md:grid-cols-2">
+            <div>
+              <label class="mb-2 block text-sm font-medium text-slate-200">Role</label>
+              <select name="role" class="nova-input">
+                <option value="user" {% if target_user.role == "user" %}selected{% endif %}>User</option>
+                <option value="admin" {% if target_user.role == "admin" %}selected{% endif %}>Admin</option>
+              </select>
+            </div>
+            <div>
+              <label class="mb-2 block text-sm font-medium text-slate-200">Quota in GB</label>
+              <input type="number" name="storage_quota_gb" min="0" step="0.1" value="{{ '0' if target_user.storage_quota_bytes <= 0 else '%.2f'|format(target_user.storage_quota_bytes / 1073741824) }}" class="nova-input" required>
+            </div>
+          </div>
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Reset password</label>
+            <input type="password" name="password" class="nova-input" placeholder="Leave blank to keep the existing password">
+          </div>
+          <label class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+            <input type="checkbox" name="email_verified" class="h-4 w-4 rounded border-white/20 bg-transparent text-fuchsia-500" {% if target_user.is_email_verified %}checked{% endif %}>
+            Email verified
+          </label>
+          <button type="submit" class="nova-button-primary w-full">Save Profile</button>
+        </form>
+      </div>
+
+      <div class="nova-panel p-6">
+        <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Usage</p>
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
+            <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Used</p>
+            <p class="mt-3 text-2xl font-semibold text-white">{{ usage.total_used|filesize }}</p>
+          </div>
+          <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
+            <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Files</p>
+            <p class="mt-3 text-2xl font-semibold text-white">{{ usage.total_files }}</p>
+          </div>
+          <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
+            <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Quota</p>
+            <p class="mt-3 text-2xl font-semibold text-white">{% if usage.is_unlimited %}Unlimited{% else %}{{ usage.quota_bytes|filesize }}{% endif %}</p>
+          </div>
+          <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
+            <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Remaining</p>
+            <p class="mt-3 text-2xl font-semibold text-white">{% if usage.is_unlimited %}Unlimited{% else %}{{ usage.remaining_bytes|filesize }}{% endif %}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="nova-panel p-6">
+        <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">Create Folder</p>
+        <h3 class="mt-2 text-2xl font-semibold text-white">Add structure to this drive</h3>
+        <form action="{{ url_for('admin.create_user_folder', user_id=target_user.id) }}" method="post" class="mt-5 space-y-4">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="parent_id" value="{{ current_folder.id }}">
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Parent folder</label>
+            <p class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white">{{ current_folder.name }}</p>
+          </div>
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Folder name</label>
+            <input type="text" name="name" class="nova-input" placeholder="Projects">
+          </div>
+          <button type="submit" class="nova-button-secondary w-full">Create Folder</button>
+        </form>
+      </div>
+
+      <div class="nova-panel overflow-hidden">
+        <div class="border-b border-white/10 px-6 py-4">
+          <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Sessions</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">Recent sign-ins</h3>
+        </div>
+        <div class="divide-y divide-white/5">
+          {% for session in recent_sessions %}
+            <div class="px-6 py-4">
+              <div class="flex items-center justify-between gap-4">
+                <p class="text-sm font-medium text-white">{{ session.created_at|datetime }}</p>
+                <span class="text-xs {% if session.is_active %}text-emerald-300{% else %}text-slate-500{% endif %}">{{ "active" if session.is_active else "inactive" }}</span>
+              </div>
+              <p class="mt-2 text-sm text-slate-400">{{ session.ip_address or "No IP recorded" }}</p>
+              <p class="mt-1 text-xs text-slate-500">{{ session.user_agent or "No user agent recorded" }}</p>
+            </div>
+          {% else %}
+            <div class="px-6 py-8 text-center text-sm text-slate-400">No session records stored for this account yet.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <div class="nova-panel p-6">
+        <div class="flex flex-wrap items-center gap-3 text-sm text-slate-400">
+          {% for crumb in breadcrumbs %}
+            <a href="{{ url_for('admin.user_details', user_id=target_user.id, folder_id=crumb.id) }}" class="transition hover:text-white">{{ crumb.name }}</a>
+            {% if not loop.last %}<span>/</span>{% endif %}
+          {% endfor %}
+        </div>
+        <div class="mt-5 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">Drive Browser</p>
+            <h3 class="mt-3 text-3xl font-semibold tracking-tight text-white">{{ current_folder.name }}</h3>
+            <p class="mt-2 text-sm leading-7 text-slate-400">Browse, inspect, and remove this user's folders and files without switching accounts.</p>
+          </div>
+          <form method="get" class="grid gap-3 sm:grid-cols-[1fr,12rem,auto]">
+            <input type="hidden" name="folder_id" value="{{ current_folder.id }}">
+            <input type="text" name="q" value="{{ query }}" placeholder="Search this folder" class="nova-input">
+            <select name="type" class="nova-input">
+              <option value="all" {% if type_filter == "all" %}selected{% endif %}>All types</option>
+              <option value="image" {% if type_filter == "image" %}selected{% endif %}>Images</option>
+              <option value="video" {% if type_filter == "video" %}selected{% endif %}>Video</option>
+              <option value="audio" {% if type_filter == "audio" %}selected{% endif %}>Audio</option>
+              <option value="document" {% if type_filter == "document" %}selected{% endif %}>Documents</option>
+            </select>
+            <button type="submit" class="nova-button-secondary">Filter</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="nova-panel p-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Folders</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">Current level</h3>
+          </div>
+          <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">{{ folders|length }}</span>
+        </div>
+        <div class="mt-5 grid gap-4 md:grid-cols-2">
+          {% for folder in folders %}
+            <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="text-lg font-semibold text-white">{{ folder.name }}</p>
+                  <p class="mt-2 text-sm text-slate-400">Created {{ folder.created_at|datetime }}</p>
+                </div>
+                <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">folder</span>
+              </div>
+              <div class="mt-5 flex gap-2">
+                <a href="{{ url_for('admin.user_details', user_id=target_user.id, folder_id=folder.id) }}" class="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-center text-sm text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Open</a>
+                <form action="{{ url_for('admin.delete_user_folder', user_id=target_user.id, folder_id=folder.id) }}" method="post" class="flex-1">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="parent_id" value="{{ current_folder.id }}">
+                  <button type="submit" class="w-full rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-2 text-center text-sm text-rose-100 transition hover:bg-rose-500/20" data-confirm-submit data-confirm-title="Delete {{ folder.name }}?" data-confirm-body="This will remove the folder and all of its descendants from the selected user's drive.">Delete</button>
+                </form>
+              </div>
+            </div>
+          {% else %}
+            <div class="col-span-full rounded-[28px] border border-dashed border-white/10 bg-white/5 p-10 text-center text-sm text-slate-400">No subfolders in this level yet.</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="nova-panel overflow-hidden">
+        <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Files</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">Managed content</h3>
+          </div>
+          <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">{{ files|length }}</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-white/10 text-sm">
+            <thead class="bg-white/5 text-left text-xs uppercase tracking-[0.24em] text-slate-500">
+              <tr>
+                <th class="px-6 py-4">File</th>
+                <th class="px-6 py-4">Type</th>
+                <th class="px-6 py-4">Size</th>
+                <th class="px-6 py-4">Uploaded</th>
+                <th class="px-6 py-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-white/5">
+              {% for file in files %}
+                <tr>
+                  <td class="px-6 py-4">
+                    <p class="font-medium text-white">{{ file.filename }}</p>
+                    <p class="mt-1 text-xs text-slate-500">{{ file.total_chunks }} chunks / {{ (file.manifest.storage_backend if file.manifest else configured_storage_backend)|upper }}</p>
+                  </td>
+                  <td class="px-6 py-4 text-slate-300">{{ file.mime_type }}</td>
+                  <td class="px-6 py-4 text-slate-300">{{ file.total_size|filesize }}</td>
+                  <td class="px-6 py-4 text-slate-300">{{ file.created_at|datetime }}</td>
+                  <td class="px-6 py-4">
+                    <div class="flex flex-wrap items-center justify-end gap-2">
+                      <a href="{{ url_for('files.download', file_id=file.id) }}" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Download</a>
+                      <a href="{{ url_for('files.details', file_id=file.id) }}" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Manage</a>
+                      <form action="{{ url_for('admin.delete_user_file', user_id=target_user.id, file_id=file.id) }}" method="post" class="flex items-center gap-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="folder_id" value="{{ current_folder.id }}">
+                        <button type="submit" class="rounded-xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-100 transition hover:bg-rose-500/20" data-confirm-submit data-confirm-title="Delete {{ file.filename }}?" data-confirm-body="This removes the file from the selected user's drive index.">Delete</button>
+                        <button type="submit" name="hard_delete" value="true" class="rounded-xl border border-rose-400/20 bg-transparent px-3 py-2 text-xs font-medium text-rose-200 transition hover:bg-rose-500/10" data-confirm-submit data-confirm-title="Hard delete {{ file.filename }}?" data-confirm-body="This permanently deletes the file record and stored chunks for the selected user.">Hard Delete</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="5" class="px-6 py-10 text-center text-sm text-slate-400">No files found in this folder view.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="nova-panel overflow-hidden">
+        <div class="border-b border-white/10 px-6 py-4">
+          <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Audit</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">User activity</h3>
+        </div>
+        <div class="divide-y divide-white/5">
+          {% for activity in recent_activity %}
+            <div class="px-6 py-4">
+              <div class="flex items-center justify-between gap-4">
+                <p class="text-sm font-medium text-white">{{ activity.action }}</p>
+                <p class="text-xs text-slate-500">{{ activity.created_at|datetime }}</p>
+              </div>
+              <p class="mt-2 text-sm text-slate-400">{{ activity.target_type }}{% if activity.target_id %} #{{ activity.target_id }}{% endif %}</p>
+            </div>
+          {% else %}
+            <div class="px-6 py-8 text-center text-sm text-slate-400">No recorded activity for this account yet.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
