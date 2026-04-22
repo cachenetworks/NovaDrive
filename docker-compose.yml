@@ -1,7 +1,6 @@
 services:
   web:
-    build:
-      context: .
+    image: ghcr.io/nekosuneprojects/novadrive:main
     command: ["waitress-serve", "--host=0.0.0.0", "--port=5000", "--call", "novadrive.app:create_app"]
     env_file:
       - .env
@@ -22,8 +21,7 @@ services:
     restart: unless-stopped
 
   bot:
-    build:
-      context: .
+    image: ghcr.io/nekosuneprojects/novadrive:main
     command: ["python", "-m", "novadrive.discord_bot"]
     env_file:
       - .env
