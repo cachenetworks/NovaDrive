@@ -27,6 +27,7 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     app = Flask(__name__, instance_relative_config=False)
     app.config.from_object(config_object or Config)
     Path(app.config["INSTANCE_DIR"]).mkdir(parents=True, exist_ok=True)
+    _ensure_database_storage_path(app)
     app.permanent_session_lifetime = timedelta(
         hours=app.config["PERMANENT_SESSION_LIFETIME_HOURS"]
     )
@@ -84,6 +85,25 @@ def _register_routes(app: Flask) -> None:
             "ok": True,
             "app": app.config["APP_NAME"],
         }
+
+
+def _ensure_database_storage_path(app: Flask) -> None:
+    database_uri = str(app.config.get("SQLALCHEMY_DATABASE_URI") or "").strip()
+    sqlite_prefixes = ("sqlite:///", "sqlite+pysqlite:///")
+    for prefix in sqlite_prefixes:
+        if not database_uri.startswith(prefix):
+            continue
+
+        raw_path = database_uri[len(prefix):]
+        path_part = raw_path.split("?", 1)[0]
+        if not path_part or path_part == ":memory:" or path_part.startswith("file:"):
+            return
+
+        database_path = Path(path_part)
+        if not database_path.is_absolute():
+            database_path = (Path(app.config["BASE_DIR"]) / database_path).resolve()
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        return
 
 
 def _ensure_runtime_schema(app: Flask) -> None:

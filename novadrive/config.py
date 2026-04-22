@@ -17,6 +17,28 @@ def _as_int(value: str | None, default: int) -> int:
         return default
 
 
+def _resolve_database_uri(base_dir: Path, instance_dir: Path) -> str:
+    configured_value = (os.getenv("DATABASE_URL") or "").strip()
+    if not configured_value:
+        return f"sqlite:///{(instance_dir / 'novadrive.db').as_posix()}"
+
+    sqlite_prefixes = ("sqlite:///", "sqlite+pysqlite:///")
+    for prefix in sqlite_prefixes:
+        if not configured_value.startswith(prefix):
+            continue
+
+        raw_path = configured_value[len(prefix):]
+        path_part, separator, query = raw_path.partition("?")
+        if not path_part or path_part == ":memory:" or path_part.startswith("/") or path_part.startswith("file:"):
+            return configured_value
+
+        absolute_path = (base_dir / path_part).resolve()
+        suffix = f"{separator}{query}" if separator else ""
+        return f"{prefix}{absolute_path.as_posix()}{suffix}"
+
+    return configured_value
+
+
 class Config:
     APP_NAME = "NovaDrive"
 
@@ -25,10 +47,7 @@ class Config:
     APP_EXTERNAL_URL = os.getenv("APP_EXTERNAL_URL", "").rstrip("/")
 
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL",
-        f"sqlite:///{(INSTANCE_DIR / 'novadrive.db').as_posix()}",
-    )
+    SQLALCHEMY_DATABASE_URI = _resolve_database_uri(BASE_DIR, INSTANCE_DIR)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     MAX_UPLOAD_SIZE_BYTES = _as_int(os.getenv("MAX_UPLOAD_SIZE_BYTES"), 536_870_912)
