@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+from datetime import timedelta
+from pathlib import Path
+
+import click
+from dotenv import load_dotenv
+from flask import Flask, flash, redirect, render_template, url_for
+from flask_login import current_user
+
+from novadrive.config import Config
+from novadrive.extensions import csrf, db, login_manager, migrate
+from novadrive.models import User
+from novadrive.services.auth_service import AuthService
+from novadrive.services.discord_storage import DiscordStorageBackend
+from novadrive.utils.logging import configure_logging
+
+load_dotenv()
+
+
+def create_app(config_object: type[Config] | None = None) -> Flask:
+    app = Flask(__name__, instance_relative_config=False)
+    app.config.from_object(config_object or Config)
+    Path(app.config["INSTANCE_DIR"]).mkdir(parents=True, exist_ok=True)
+    app.permanent_session_lifetime = timedelta(
+        hours=app.config["PERMANENT_SESSION_LIFETIME_HOURS"]
+    )
+
+    configure_logging(app.config["LOG_LEVEL"])
+    _init_extensions(app)
+    _register_blueprints(app)
+    _register_template_helpers(app)
+    _register_error_handlers(app)
+    _register_cli(app)
+    return app
+
+
+def _init_extensions(app: Flask) -> None:
+    db.init_app(app)
+    migrate.init_app(app, db)
+    login_manager.init_app(app)
+    csrf.init_app(app)
+
+    login_manager.login_view = "auth.login"
+    login_manager.login_message_category = "info"
+
+
+@login_manager.user_loader
+def load_user(user_id: str) -> User | None:
+    return db.session.get(User, int(user_id))
+
+
+def _register_blueprints(app: Flask) -> None:
+    from novadrive.routes.admin import admin_bp
+    from novadrive.routes.auth import auth_bp
+    from novadrive.routes.dashboard import dashboard_bp
+    from novadrive.routes.files import files_bp
+    from novadrive.routes.folders import folders_bp
+    from novadrive.routes.share import share_bp
+
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(dashboard_bp)
+    app.register_blueprint(files_bp)
+    app.register_blueprint(folders_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(share_bp)
+
+
+def _register_template_helpers(app: Flask) -> None:
+    @app.template_filter("filesize")
+    def filesize_filter(value: int | None) -> str:
+        if value is None:
+            return "-"
+        units = ["B", "KB", "MB", "GB", "TB"]
+        size = float(value)
+        for unit in units:
+            if size < 1024 or unit == units[-1]:
+                if unit == "B":
+                    return f"{int(size)} {unit}"
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{value} B"
+
+    @app.template_filter("datetime")
+    def datetime_filter(value) -> str:
+        if not value:
+            return "-"
+        return value.strftime("%Y-%m-%d %H:%M")
+
+    @app.context_processor
+    def inject_globals():
+        sidebar_tree = []
+        sidebar_usage = None
+        if current_user.is_authenticated:
+            from novadrive.services.file_service import FileService
+
+            sidebar_tree = FileService.folder_tree(current_user)
+            sidebar_usage = FileService.usage_summary(current_user)
+        return {
+            "app_name": app.config["APP_NAME"],
+            "allow_public_sharing": app.config["ALLOW_PUBLIC_SHARING"],
+            "current_user_obj": current_user if current_user.is_authenticated else None,
+            "sidebar_tree": sidebar_tree,
+            "sidebar_usage": sidebar_usage,
+        }
+
+
+def _register_error_handlers(app: Flask) -> None:
+    @app.errorhandler(404)
+    def not_found(error):
+        return render_template("errors/404.html"), 404
+
+    @app.errorhandler(413)
+    def request_too_large(error):
+        flash("That upload exceeds the configured maximum file size.", "error")
+        if current_user.is_authenticated:
+            return redirect(url_for("dashboard.index"))
+        return redirect(url_for("auth.login"))
+
+    @app.errorhandler(500)
+    def server_error(error):
+        db.session.rollback()
+        return render_template("errors/500.html"), 500
+
+
+def _register_cli(app: Flask) -> None:
+    @app.cli.command("init-db")
+    def init_db_command():
+        """Create all database tables."""
+        db.create_all()
+        click.echo("Database initialized.")
+
+    @app.cli.command("create-admin")
+    @click.option("--username", prompt=True)
+    @click.option("--email", prompt=True)
+    @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
+    def create_admin_command(username: str, email: str, password: str):
+        """Create an admin user without using the UI."""
+        user = AuthService.create_user(
+            username=username,
+            email=email,
+            password=password,
+            force_role="admin",
+        )
+        click.echo(f"Admin user created: {user.username}")
+
+    @app.cli.command("storage-health")
+    def storage_health_command():
+        """Check the Discord bot bridge health."""
+        backend = DiscordStorageBackend(app.config)
+        result = backend.health_check()
+        click.echo(result)

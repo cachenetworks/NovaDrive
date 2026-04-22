@@ -1,0 +1,22 @@
+<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+  {% for file in files %}
+    <div class="rounded-3xl border border-white/10 bg-white/5 p-5 transition hover:-translate-y-1 hover:border-fuchsia-400/30 hover:bg-white/7 hover:shadow-[0_24px_80px_rgba(168,85,247,0.12)]">
+      <div class="flex items-start justify-between gap-4">
+        <div class="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-[11px] font-semibold uppercase tracking-[0.24em] text-fuchsia-200">{{ file.extension or "file" }}</div>
+        <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">{{ file.total_size|filesize }}</span>
+      </div>
+      <a href="{{ url_for('files.details', file_id=file.id) }}" class="mt-4 block">
+        <h3 class="truncate text-base font-semibold text-white">{{ file.filename }}</h3>
+        <p class="mt-2 text-sm text-slate-400">{{ file.mime_type }}</p>
+      </a>
+      <div class="mt-5 flex items-center justify-between text-xs text-slate-500">
+        <span>{{ file.created_at|datetime }}</span>
+        <span>{{ file.total_chunks }} chunks</span>
+      </div>
+      <div class="mt-5 flex items-center gap-2">
+        <a href="{{ url_for('files.download', file_id=file.id) }}" class="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-center text-sm text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Download</a>
+        <a href="{{ url_for('files.details', file_id=file.id) }}" class="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-center text-sm text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Manage</a>
+      </div>
+    </div>
+  {% endfor %}
+</div>

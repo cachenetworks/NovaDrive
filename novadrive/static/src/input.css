@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply font-sans;
+    background-image:
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.03), transparent),
+      radial-gradient(circle at top left, rgba(217, 70, 239, 0.08), transparent 35%),
+      radial-gradient(circle at top right, rgba(124, 58, 237, 0.08), transparent 35%);
+  }
+
+  ::selection {
+    @apply bg-fuchsia-500/40 text-white;
+  }
+}
+
+@layer components {
+  .nova-panel {
+    @apply rounded-[28px] border border-white/10 bg-black/35 shadow-[0_22px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl;
+  }
+
+  .nova-input {
+    @apply w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-fuchsia-400/50 focus:bg-white/10 focus:ring-2 focus:ring-fuchsia-500/20;
+  }
+
+  .nova-button-primary {
+    @apply inline-flex items-center justify-center rounded-2xl border border-fuchsia-400/20 bg-gradient-to-r from-fuchsia-500 to-violet-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_0_35px_rgba(168,85,247,0.28)] transition hover:scale-[1.01] hover:shadow-[0_0_45px_rgba(168,85,247,0.38)];
+  }
+
+  .nova-button-secondary {
+    @apply inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10;
+  }
+
+  .nova-nav-link {
+    @apply flex items-center justify-between rounded-2xl border border-transparent bg-transparent px-4 py-3 text-sm font-medium text-slate-300 transition hover:border-white/10 hover:bg-white/5 hover:text-white;
+  }
+
+  .nova-nav-link-active {
+    @apply border-fuchsia-400/20 bg-fuchsia-500/10 text-white shadow-[0_0_30px_rgba(168,85,247,0.12)];
+  }
+
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+  }
+}

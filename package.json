@@ -1,0 +1,11 @@
+{
+  "name": "novadrive",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./novadrive/static/src/input.css -o ./novadrive/static/dist/output.css --minify",
+    "watch:css": "tailwindcss -i ./novadrive/static/src/input.css -o ./novadrive/static/dist/output.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

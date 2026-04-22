@@ -1,0 +1,44 @@
+<div class="overflow-x-auto">
+  <table class="min-w-full divide-y divide-white/10 text-sm">
+    <thead class="bg-white/5 text-left text-xs uppercase tracking-[0.24em] text-slate-500">
+      <tr>
+        <th class="px-5 py-4">File</th>
+        <th class="px-5 py-4">Type</th>
+        <th class="px-5 py-4">Size</th>
+        <th class="px-5 py-4">Owner</th>
+        <th class="px-5 py-4">Uploaded</th>
+        <th class="px-5 py-4 text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-white/5">
+      {% for file in files %}
+        <tr class="transition hover:bg-white/5">
+          <td class="px-5 py-4">
+            <a href="{{ url_for('files.details', file_id=file.id) }}" class="flex items-center gap-3">
+              <span class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-[11px] font-semibold uppercase tracking-[0.24em] text-fuchsia-200">{{ file.extension or "file" }}</span>
+              <span>
+                <span class="block font-medium text-white">{{ file.filename }}</span>
+                <span class="text-xs text-slate-500">{{ file.sha256[:12] }}...</span>
+              </span>
+            </a>
+          </td>
+          <td class="px-5 py-4 text-slate-300">{{ file.mime_type }}</td>
+          <td class="px-5 py-4 text-slate-300">{{ file.total_size|filesize }}</td>
+          <td class="px-5 py-4 text-slate-300">{{ file.owner.username }}</td>
+          <td class="px-5 py-4 text-slate-400">{{ file.created_at|datetime }}</td>
+          <td class="px-5 py-4">
+            <div class="flex items-center justify-end gap-2">
+              <a href="{{ url_for('files.download', file_id=file.id) }}" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Download</a>
+              <a href="{{ url_for('files.details', file_id=file.id) }}" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Manage</a>
+              <form action="{{ url_for('files.delete', file_id=file.id) }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="folder_id" value="{{ current_folder.id }}">
+                <button type="submit" class="rounded-xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-100 transition hover:bg-rose-500/20" data-confirm-submit data-confirm-title="Delete {{ file.filename }}?" data-confirm-body="The file will be removed from your NovaDrive index and Discord chunk references.">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

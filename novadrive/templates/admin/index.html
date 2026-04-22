@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Admin · NovaDrive{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div class="nova-panel p-6">
+      <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Users</p>
+      <p class="mt-3 text-4xl font-semibold text-white">{{ stats.user_count }}</p>
+    </div>
+    <div class="nova-panel p-6">
+      <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Files</p>
+      <p class="mt-3 text-4xl font-semibold text-white">{{ stats.file_count }}</p>
+    </div>
+    <div class="nova-panel p-6">
+      <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Folders</p>
+      <p class="mt-3 text-4xl font-semibold text-white">{{ stats.folder_count }}</p>
+    </div>
+    <div class="nova-panel p-6">
+      <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Storage</p>
+      <p class="mt-3 text-4xl font-semibold text-white">{{ stats.total_storage|filesize }}</p>
+    </div>
+  </section>
+
+  <section class="grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">
+    <div class="space-y-6">
+      <div class="nova-panel p-6">
+        <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">Health</p>
+        <h2 class="mt-2 text-2xl font-semibold text-white">Discord storage bridge</h2>
+        <div class="mt-5 rounded-3xl border {% if storage_health.ok %}border-emerald-400/20 bg-emerald-500/10{% else %}border-rose-400/20 bg-rose-500/10{% endif %} p-5">
+          <p class="text-sm font-semibold {% if storage_health.ok %}text-emerald-100{% else %}text-rose-100{% endif %}">
+            {% if storage_health.ok %}Operational{% else %}Unavailable{% endif %}
+          </p>
+          <p class="mt-2 text-sm text-slate-300">
+            {% if storage_health.ok %}
+              {{ storage_health.bot_user }} connected to guild {{ storage_health.guild_name or storage_health.guild_id }}.
+            {% else %}
+              {{ storage_health.error }}
+            {% endif %}
+          </p>
+        </div>
+        <div class="mt-5 space-y-3">
+          {% for channel in storage_health.channels or [] %}
+            <div class="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
+              <span class="text-slate-300">#{{ channel.name }}</span>
+              <span class="{% if channel.resolved %}text-emerald-300{% else %}text-rose-300{% endif %}">{{ "resolved" if channel.resolved else "unresolved" }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="nova-panel p-6">
+        <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Config Snapshot</p>
+        <div class="mt-5 space-y-3 text-sm">
+          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Public sharing: <span class="text-white">{{ "enabled" if config_snapshot.allow_public_sharing else "disabled" }}</span></div>
+          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Chunk size: <span class="text-white">{{ config_snapshot.chunk_size|filesize }}</span></div>
+          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Bridge URL: <span class="text-white">{{ config_snapshot.bridge_url }}</span></div>
+          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-300">Channels: <span class="text-white">{{ config_snapshot.channels|join(', ') if config_snapshot.channels else 'None configured' }}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <div class="nova-panel overflow-hidden">
+        <div class="border-b border-white/10 px-6 py-4">
+          <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Users</p>
+          <h2 class="mt-2 text-2xl font-semibold text-white">Workspace members</h2>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-white/10 text-sm">
+            <thead class="bg-white/5 text-left text-xs uppercase tracking-[0.24em] text-slate-500">
+              <tr>
+                <th class="px-6 py-4">User</th>
+                <th class="px-6 py-4">Role</th>
+                <th class="px-6 py-4">Joined</th>
+                <th class="px-6 py-4">Last login</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-white/5">
+              {% for user in users %}
+                <tr>
+                  <td class="px-6 py-4">
+                    <p class="font-medium text-white">{{ user.username }}</p>
+                    <p class="text-xs text-slate-500">{{ user.email }}</p>
+                  </td>
+                  <td class="px-6 py-4 text-slate-300">{{ user.role|title }}</td>
+                  <td class="px-6 py-4 text-slate-300">{{ user.created_at|datetime }}</td>
+                  <td class="px-6 py-4 text-slate-300">{{ user.last_login_at|datetime }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="nova-panel overflow-hidden">
+        <div class="border-b border-white/10 px-6 py-4">
+          <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Audit</p>
+          <h2 class="mt-2 text-2xl font-semibold text-white">Recent activity</h2>
+        </div>
+        <div class="divide-y divide-white/5">
+          {% for activity in recent_activity %}
+            <div class="px-6 py-4">
+              <div class="flex items-center justify-between gap-4">
+                <p class="text-sm font-medium text-white">{{ activity.action }}</p>
+                <p class="text-xs text-slate-500">{{ activity.created_at|datetime }}</p>
+              </div>
+              <p class="mt-2 text-sm text-slate-400">{{ activity.target_type }}{% if activity.target_id %} #{{ activity.target_id }}{% endif %}</p>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

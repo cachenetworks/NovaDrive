@@ -1,0 +1,68 @@
+{% from "components/folder_tree.html" import render_folder_tree %}
+{% set active_folder_id = current_folder.id if current_folder is defined else (file.folder_id if file is defined else None) %}
+<aside class="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-white/10 bg-black/40 px-5 pb-6 pt-5 backdrop-blur-2xl lg:flex lg:flex-col">
+  <a href="{{ url_for('dashboard.index') }}" class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition hover:border-fuchsia-400/40 hover:bg-white/10">
+    <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-fuchsia-500 to-violet-500 text-lg font-bold text-white shadow-[0_0_30px_rgba(192,38,211,0.35)]">
+      N
+    </div>
+    <div>
+      <div class="font-display text-lg font-bold tracking-tight text-white">NovaDrive</div>
+      <div class="text-xs text-slate-400">Discord-backed cloud storage</div>
+    </div>
+  </a>
+
+  <nav class="mt-6 space-y-2">
+    <a href="{{ url_for('dashboard.index') }}" class="nova-nav-link {% if request.endpoint == 'dashboard.index' %}nova-nav-link-active{% endif %}">
+      <span>Drive</span>
+      <span class="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-slate-400">{{ sidebar_usage.total_files if sidebar_usage else 0 }}</span>
+    </a>
+    {% if current_user.is_admin %}
+      <a href="{{ url_for('admin.index') }}" class="nova-nav-link {% if request.endpoint == 'admin.index' %}nova-nav-link-active{% endif %}">
+        <span>Admin</span>
+        <span class="text-xs text-fuchsia-300">ops</span>
+      </a>
+    {% endif %}
+  </nav>
+
+  <div class="mt-6 rounded-3xl border border-white/10 bg-white/5 p-4">
+    <div class="flex items-center justify-between">
+      <h2 class="text-sm font-semibold text-white">Folders</h2>
+      <span class="text-xs text-slate-500">tree</span>
+    </div>
+    <div class="mt-4 max-h-[22rem] overflow-y-auto pr-1 custom-scrollbar">
+      {{ render_folder_tree(sidebar_tree, active_folder_id) }}
+    </div>
+  </div>
+
+  <div class="mt-6 rounded-3xl border border-fuchsia-500/20 bg-fuchsia-500/8 p-4 shadow-[0_0_40px_rgba(168,85,247,0.08)]">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/60">Storage</p>
+        <p class="mt-2 text-2xl font-semibold text-white">{{ (sidebar_usage.total_used if sidebar_usage else 0)|filesize }}</p>
+      </div>
+      <div class="rounded-full border border-fuchsia-400/30 bg-fuchsia-400/10 px-3 py-1 text-sm font-medium text-fuchsia-200">
+        {{ sidebar_usage.percent_used if sidebar_usage else 0 }}%
+      </div>
+    </div>
+    <div class="mt-4 h-2 rounded-full bg-white/10">
+      <div class="h-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-violet-500" style="width: {{ sidebar_usage.percent_used if sidebar_usage else 0 }}%"></div>
+    </div>
+    <p class="mt-3 text-xs leading-5 text-slate-400">
+      Total library footprint against the local soft-limit envelope.
+    </p>
+  </div>
+
+  <div class="mt-auto pt-6">
+    <div class="mb-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+      <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Signed In</p>
+      <p class="mt-2 text-base font-semibold text-white">{{ current_user.username }}</p>
+      <p class="text-sm text-slate-400">{{ current_user.email }}</p>
+    </div>
+    <form action="{{ url_for('auth.logout') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">
+        Sign out
+      </button>
+    </form>
+  </div>
+</aside>

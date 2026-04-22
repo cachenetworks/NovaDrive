@@ -1,0 +1,37 @@
+{% set title_map = {
+  "dashboard.index": "My Drive",
+  "files.details": "File Details",
+  "admin.index": "Admin Console",
+  "share.view": "Shared File"
+} %}
+<header class="fixed inset-x-0 top-0 z-20 border-b border-white/10 bg-black/30 backdrop-blur-2xl lg:left-72">
+  <div class="flex items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-10">
+    <div>
+      <div class="flex items-center gap-3 lg:hidden">
+        <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-fuchsia-500 to-violet-500 font-display text-lg font-bold text-white">N</div>
+        <span class="font-display text-lg font-semibold tracking-tight text-white">NovaDrive</span>
+      </div>
+      <h1 class="mt-0 text-xl font-semibold tracking-tight text-white lg:text-2xl">{{ title_map.get(request.endpoint, app_name) }}</h1>
+      <p class="mt-1 text-sm text-slate-400">Premium Discord-native storage with chunk verification and a clean operations surface.</p>
+    </div>
+    <div class="flex items-center gap-3">
+      {% if current_user.is_admin %}
+        <a href="{{ url_for('admin.index') }}" class="hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10 sm:inline-flex">Admin</a>
+      {% endif %}
+      <a href="{{ url_for('dashboard.index') }}" class="hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10 sm:inline-flex">Drive</a>
+      <form action="{{ url_for('auth.logout') }}" method="post" class="lg:hidden">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Sign out</button>
+      </form>
+      <div class="hidden items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 sm:flex">
+        <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-fuchsia-500/80 to-violet-500/80 font-semibold text-white">
+          {{ current_user.username[:1]|upper }}
+        </div>
+        <div class="max-w-[12rem]">
+          <p class="truncate text-sm font-medium text-white">{{ current_user.username }}</p>
+          <p class="truncate text-xs text-slate-400">{{ current_user.role|title }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
