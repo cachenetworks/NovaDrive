@@ -13,6 +13,14 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 class TimestampMixin:
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = db.Column(
@@ -220,7 +228,8 @@ class ShareLink(db.Model):
 
     @property
     def is_expired(self) -> bool:
-        return self.expires_at is not None and self.expires_at <= utcnow()
+        expires_at = as_utc(self.expires_at)
+        return expires_at is not None and expires_at <= utcnow()
 
 
 class SharedDrive(TimestampMixin, db.Model):

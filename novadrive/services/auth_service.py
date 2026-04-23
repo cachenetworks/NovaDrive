@@ -9,7 +9,7 @@ from flask import current_app, has_app_context
 from sqlalchemy import func, or_
 
 from novadrive.extensions import db
-from novadrive.models import ActivityLog, Folder, User, UserSession, utcnow
+from novadrive.models import ActivityLog, Folder, User, UserSession, as_utc, utcnow
 from novadrive.services.activity_service import ActivityService
 
 
@@ -289,7 +289,8 @@ class AuthService:
         ).first()
         if not stored_session:
             return False
-        if stored_session.expires_at and stored_session.expires_at <= utcnow():
+        expires_at = as_utc(stored_session.expires_at)
+        if expires_at and expires_at <= utcnow():
             stored_session.is_active = False
             db.session.commit()
             return False

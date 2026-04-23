@@ -7,7 +7,7 @@ from flask import Blueprint, current_app, flash, redirect, render_template, requ
 from flask_login import current_user, login_required, login_user, logout_user
 
 from novadrive.extensions import db
-from novadrive.models import User, utcnow
+from novadrive.models import User, as_utc, utcnow
 from novadrive.forms import (
     DefaultAdminSetupForm,
     ForgotPasswordForm,
@@ -130,7 +130,7 @@ def forgot_password():
         user = AuthService.find_by_email(form.email.data)
         if user:
             resend_interval = current_app.config["PASSWORD_RESET_RESEND_INTERVAL_SECONDS"]
-            last_sent_at = user.password_reset_sent_at
+            last_sent_at = as_utc(user.password_reset_sent_at)
             if not last_sent_at or last_sent_at + timedelta(seconds=resend_interval) <= utcnow():
                 try:
                     _send_password_reset_email(user)
@@ -435,7 +435,7 @@ def resend_verification():
         flash("Email verification is not required in this deployment.", "info")
         return redirect(url_for("auth.login", email=user.email))
 
-    last_sent_at = user.email_verification_sent_at
+    last_sent_at = as_utc(user.email_verification_sent_at)
     resend_interval = current_app.config["EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS"]
     if last_sent_at and last_sent_at + timedelta(seconds=resend_interval) > utcnow():
         flash("Wait a moment before requesting another verification email.", "error")
