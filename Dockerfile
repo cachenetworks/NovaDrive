@@ -1,3 +1,4 @@
+LABEL org.opencontainers.image.source https://github.com/cachenetworks/NovaDrive
 FROM node:22-alpine AS assets
 
 WORKDIR /app
