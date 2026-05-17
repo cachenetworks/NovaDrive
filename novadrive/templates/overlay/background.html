@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NovaDrive OBS Background</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        .slider {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+        }
+
+        .slides {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .slides img,
+        .slides video {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: var(--overlay-fit, cover);
+            opacity: 0;
+            transition: opacity var(--fade-duration, 1000ms) ease-in-out;
+        }
+
+        .slides img.active,
+        .slides video.active {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="slider">
+        <div class="slides" id="slides"></div>
+    </div>
+
+    <script>
+        let currentIndex = 0;
+        let intervalId = null;
+
+        function apiKeyFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get("api_key") || params.get("apikey") || params.get("key") || "";
+        }
+
+        function fetchImages() {
+            const apikey = apiKeyFromUrl();
+            if (!apikey) return;
+
+            const apiUrl = new URL({{ background_endpoint|tojson }}, window.location.origin);
+            apiUrl.searchParams.set("apikey", apikey);
+
+            fetch(apiUrl.toString(), { cache: "no-store" })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) return;
+
+                    const options = data.options || {};
+                    document.documentElement.style.setProperty("--fade-duration", `${Number(options.fade_duration_ms || 1000)}ms`);
+                    document.documentElement.style.setProperty("--overlay-fit", options.fit_mode || "cover");
+
+                    const slidesDiv = document.getElementById("slides");
+                    slidesDiv.innerHTML = "";
+                    currentIndex = 0;
+
+                    const media = Array.isArray(data.assets) ? data.assets : [];
+                    media.forEach((item, index) => {
+                        const slide = createSlide(item);
+                        if (!slide) return;
+                        if (index === 0) {
+                            slide.classList.add("active");
+                        }
+                        slidesDiv.appendChild(slide);
+                        if (index === 0) {
+                            loadSlideMedia(slide);
+                            playIfVideo(slide);
+                        }
+                    });
+                    preloadRelativeSlide(1);
+
+                    autoSlide(Number(options.slide_interval_seconds || 30) * 1000);
+                });
+        }
+
+        function createSlide(item) {
+            if (item.kind === "video") {
+                const video = document.createElement("video");
+                video.dataset.src = item.raw_url || item.url;
+                video.autoplay = true;
+                video.loop = true;
+                video.muted = true;
+                video.playsInline = true;
+                video.controls = false;
+                video.preload = "none";
+                video.addEventListener("error", () => removeFailedSlide(video));
+                return video;
+            }
+
+            if (item.kind === "image") {
+                const img = document.createElement("img");
+                img.dataset.src = item.raw_url || item.url;
+                img.alt = item.filename || "";
+                img.addEventListener("error", () => removeFailedSlide(img));
+                return img;
+            }
+
+            return null;
+        }
+
+        function autoSlide(intervalMs) {
+            const slides = document.querySelectorAll(".slides img, .slides video");
+            if (intervalId) clearInterval(intervalId);
+            if (slides.length <= 1) return;
+            if (!Number.isFinite(intervalMs) || intervalMs < 2000) intervalMs = 30000;
+
+            intervalId = setInterval(() => {
+                slides[currentIndex].classList.remove("active");
+                pauseIfVideo(slides[currentIndex]);
+                currentIndex = (currentIndex + 1) % slides.length;
+                loadSlideMedia(slides[currentIndex]);
+                slides[currentIndex].classList.add("active");
+                playIfVideo(slides[currentIndex]);
+                preloadRelativeSlide(1);
+            }, intervalMs);
+        }
+
+        function loadSlideMedia(slide) {
+            if (!slide || slide.src || !slide.dataset.src) return;
+            slide.src = slide.dataset.src;
+        }
+
+        function preloadRelativeSlide(offset) {
+            const slides = document.querySelectorAll(".slides img, .slides video");
+            if (slides.length <= 1) return;
+            const preloadIndex = (currentIndex + offset + slides.length) % slides.length;
+            const slide = slides[preloadIndex];
+            if (slide.tagName === "VIDEO") return;
+            loadSlideMedia(slide);
+        }
+
+        function playIfVideo(slide) {
+            if (slide.tagName !== "VIDEO") return;
+            loadSlideMedia(slide);
+            slide.currentTime = 0;
+            slide.play().catch(() => {});
+        }
+
+        function pauseIfVideo(slide) {
+            if (slide.tagName !== "VIDEO") return;
+            slide.pause();
+        }
+
+        function removeFailedSlide(slide) {
+            const wasActive = slide.classList.contains("active");
+            slide.remove();
+            const slides = document.querySelectorAll(".slides img, .slides video");
+            if (!slides.length) {
+                if (intervalId) clearInterval(intervalId);
+                return;
+            }
+            if (!wasActive) return;
+            currentIndex = currentIndex % slides.length;
+            loadSlideMedia(slides[currentIndex]);
+            slides[currentIndex].classList.add("active");
+            playIfVideo(slides[currentIndex]);
+            preloadRelativeSlide(1);
+        }
+
+        fetchImages();
+    </script>
+</body>
+</html>

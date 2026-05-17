@@ -116,7 +116,7 @@ function initCopyButtons() {
     button.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(button.dataset.copyText || "");
-        toastMessage("Share link copied to clipboard.", "success");
+        toastMessage(button.dataset.copySuccess || "Copied to clipboard.", "success");
       } catch (error) {
         toastMessage("Could not copy that link automatically.", "error");
       }

@@ -233,11 +233,16 @@ class Config:
         "DISCORD_BOT_BRIDGE_SHARED_SECRET",
         "novadrive-local-secret",
     )
+    DISCORD_BOT_BRIDGE_CONNECT_TIMEOUT_SECONDS = _as_int(
+        os.getenv("DISCORD_BOT_BRIDGE_CONNECT_TIMEOUT_SECONDS"),
+        2,
+    )
     DISCORD_BOT_BRIDGE_TIMEOUT_SECONDS = _as_int(
         os.getenv("DISCORD_BOT_BRIDGE_TIMEOUT_SECONDS"),
         60,
     )
     DISCORD_UPLOAD_RETRY_COUNT = _as_int(os.getenv("DISCORD_UPLOAD_RETRY_COUNT"), 3)
+    DISCORD_FETCH_RETRY_COUNT = _as_int(os.getenv("DISCORD_FETCH_RETRY_COUNT"), 0)
 
     SHARE_TOKEN_BYTES = _as_int(os.getenv("SHARE_TOKEN_BYTES"), 24)
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()

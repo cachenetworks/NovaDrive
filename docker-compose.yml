@@ -1,6 +1,7 @@
 services:
   web:
-    image: ghcr.io/nekosuneprojects/novadrive:main
+    build: .
+    image: ghcr.io/cachenetworks/novadrive:main
     command: ["waitress-serve", "--host=0.0.0.0", "--port=5000", "--call", "novadrive.app:create_app"]
     env_file:
       - .env
@@ -11,7 +12,8 @@ services:
     volumes:
       - novadrive-instance:/app/instance
     depends_on:
-      - bot
+      bot:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/healthz').read()"]
       interval: 30s
@@ -21,7 +23,8 @@ services:
     restart: unless-stopped
 
   bot:
-    image: ghcr.io/nekosuneprojects/novadrive:main
+    build: .
+    image: ghcr.io/cachenetworks/novadrive:main
     command: ["python", "-m", "novadrive.discord_bot"]
     env_file:
       - .env
@@ -29,6 +32,12 @@ services:
       DISCORD_BOT_BRIDGE_URL: http://0.0.0.0:5051
     volumes:
       - novadrive-instance:/app/instance
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request; req = urllib.request.Request('http://127.0.0.1:5051/health', headers={'X-NovaDrive-Bridge-Secret': os.environ.get('DISCORD_BOT_BRIDGE_SHARED_SECRET', 'novadrive-local-secret')}); urllib.request.urlopen(req, timeout=5).read()"]
+      interval: 15s
+      timeout: 7s
+      retries: 8
+      start_period: 20s
     restart: unless-stopped
 
 volumes:

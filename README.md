@@ -422,8 +422,10 @@ Recommended bot permissions:
 | `DISCORD_CHUNK_SIZE_BYTES` | Explicit chunk size override | `7737856` |
 | `DISCORD_BOT_BRIDGE_URL` | HTTP address of the bot bridge | `http://127.0.0.1:5051` |
 | `DISCORD_BOT_BRIDGE_SHARED_SECRET` | Shared secret between Flask and bot bridge | `replace-this` |
+| `DISCORD_BOT_BRIDGE_CONNECT_TIMEOUT_SECONDS` | TCP connect timeout for bridge calls | `2` |
 | `DISCORD_BOT_BRIDGE_TIMEOUT_SECONDS` | Timeout for chunk transfer requests | `60` |
 | `DISCORD_UPLOAD_RETRY_COUNT` | Retry count for storage bridge HTTP calls | `3` |
+| `DISCORD_FETCH_RETRY_COUNT` | Retry count for chunk fetch bridge calls | `0` |
 | `SHARE_TOKEN_BYTES` | Entropy size for generated share tokens | `24` |
 | `LOG_LEVEL` | Application log verbosity | `INFO` |
 

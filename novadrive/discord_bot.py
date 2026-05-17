@@ -12,6 +12,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, request
+from waitress import serve
 
 from novadrive.config import Config
 from novadrive.utils.logging import configure_logging, structured_log
@@ -214,7 +215,7 @@ def run_bridge_server() -> None:
         host=host,
         port=port,
     )
-    bridge_app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
+    serve(bridge_app, host=host, port=port, threads=8)
 
 
 def main() -> None:

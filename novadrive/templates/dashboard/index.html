@@ -296,6 +296,41 @@
         </div>
       </div>
 
+      <div id="obs-overlay-panel" class="nova-panel p-5">
+        {% set overlay_key = generated_api_key if generated_api_key else 'YOUR_API_KEY' %}
+        {% set obs_overlay_url = external_url('overlay.obs_background', api_key=overlay_key) %}
+        {% set obs_settings_url = url_for('overlay.background_settings') %}
+        {% set background_api_url = external_url('api.overlay_background', apikey=overlay_key) %}
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">OBS Overlay</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">Saved background source</h3>
+            <p class="mt-2 text-sm leading-7 text-slate-400">Select images, GIFs, and videos for a fullscreen OBS slideshow. NovaDrive saves the options to your account and serves the clean browser source at /overlay/obs/background.</p>
+          </div>
+          <a href="{{ obs_settings_url }}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Select Backgrounds</a>
+        </div>
+
+        <div class="mt-5 space-y-4">
+          <div class="rounded-3xl border border-white/10 bg-white/5 p-4">
+            <p class="text-xs uppercase tracking-[0.24em] text-slate-500">OBS browser source URL</p>
+            <p class="mt-2 break-all text-sm text-white">{{ obs_overlay_url }}</p>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <button type="button" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10" data-copy-text="{{ obs_overlay_url }}" data-copy-success="OBS overlay URL copied to clipboard.">Copy OBS URL</button>
+              <a href="{{ obs_overlay_url }}" target="_blank" rel="noreferrer" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Preview Clean</a>
+            </div>
+            {% if not generated_api_key %}
+              <p class="mt-3 text-xs leading-6 text-amber-200">Replace YOUR_API_KEY with a current API key, or regenerate the key above to have NovaDrive fill it into this URL once.</p>
+            {% endif %}
+          </div>
+
+          <div class="rounded-3xl border border-white/10 bg-white/5 p-4">
+            <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Background API</p>
+            <p class="mt-2 break-all text-sm text-white">{{ background_api_url }}</p>
+            <p class="mt-2 text-xs leading-6 text-slate-500">This replaces the old fetch_images.php step and returns your saved OBS media and slider options directly from NovaDrive.</p>
+          </div>
+        </div>
+      </div>
+
       <div id="security-panel" class="nova-panel p-5">
         <div class="flex items-start justify-between gap-4">
           <div>

@@ -56,6 +56,13 @@ class User(UserMixin, TimestampMixin, db.Model):
 
     folders = db.relationship("Folder", back_populates="owner", lazy="select")
     files = db.relationship("File", back_populates="owner", lazy="select")
+    obs_overlay_settings = db.relationship(
+        "ObsOverlaySettings",
+        back_populates="user",
+        lazy="select",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
     activity_logs = db.relationship("ActivityLog", back_populates="user", lazy="select")
     sessions = db.relationship("UserSession", back_populates="user", lazy="select")
     shared_drives_owned = db.relationship(
@@ -336,4 +343,19 @@ class UserSession(db.Model):
     expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     user = db.relationship("User", back_populates="sessions")
+
+
+class ObsOverlaySettings(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, unique=True, index=True)
+    folder_id = db.Column(db.Integer, db.ForeignKey("folder.id"), nullable=True, index=True)
+    media_filter = db.Column(db.String(16), nullable=False, default="image")
+    fit_mode = db.Column(db.String(16), nullable=False, default="cover")
+    slide_interval_seconds = db.Column(db.Integer, nullable=False, default=30)
+    fade_duration_ms = db.Column(db.Integer, nullable=False, default=1000)
+    shuffle = db.Column(db.Boolean, nullable=False, default=False)
+    selected_file_ids_json = db.Column(db.Text, nullable=False, default="[]")
+
+    user = db.relationship("User", back_populates="obs_overlay_settings")
+    folder = db.relationship("Folder")
 

@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}OBS Background - NovaDrive{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <section class="nova-panel p-6">
+    <div class="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+      <div>
+        <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">OBS Overlay</p>
+        <h2 class="mt-3 text-3xl font-semibold tracking-tight text-white">Saved background slider</h2>
+        <p class="mt-3 max-w-2xl text-sm leading-7 text-slate-400">Choose the images, GIFs, and videos that should appear behind your OBS scene. These settings are saved to your NovaDrive account and loaded by the OBS browser source URL.</p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a href="{{ overlay_url }}" target="_blank" rel="noreferrer" class="nova-button-primary">Preview OBS Background</a>
+        <a href="{{ url_for('dashboard.index') }}" class="nova-button-secondary">Back to Dashboard</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
+    <form action="{{ url_for('overlay.background_settings') }}" method="post" class="space-y-6">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="nova-panel p-5">
+        <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">Options</p>
+        <h3 class="mt-2 text-2xl font-semibold text-white">Slider behavior</h3>
+
+        <div class="mt-5 grid gap-4 md:grid-cols-2">
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Source folder</label>
+            <select name="folder_id" class="nova-input">
+              <option value="">All my media</option>
+              {% for option_id, option_label in folder_options %}
+                <option value="{{ option_id }}" {% if selected_folder_id == option_id %}selected{% endif %}>{{ option_label }}</option>
+              {% endfor %}
+            </select>
+            <p class="mt-2 text-xs leading-6 text-slate-500">Folder is used when no specific files are checked below.</p>
+          </div>
+
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Media type</label>
+            <select name="media_filter" class="nova-input">
+              <option value="image" {% if settings.media_filter == "image" %}selected{% endif %}>Images and GIFs</option>
+              <option value="video" {% if settings.media_filter == "video" %}selected{% endif %}>Videos</option>
+              <option value="media" {% if settings.media_filter == "media" %}selected{% endif %}>Images, GIFs, and videos</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Fit mode</label>
+            <select name="fit_mode" class="nova-input">
+              <option value="cover" {% if settings.fit_mode == "cover" %}selected{% endif %}>Cover</option>
+              <option value="contain" {% if settings.fit_mode == "contain" %}selected{% endif %}>Contain</option>
+              <option value="fill" {% if settings.fit_mode == "fill" %}selected{% endif %}>Stretch</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Slide seconds</label>
+            <input type="number" name="slide_interval_seconds" min="2" max="3600" value="{{ settings.slide_interval_seconds }}" class="nova-input">
+          </div>
+
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-200">Fade milliseconds</label>
+            <input type="number" name="fade_duration_ms" min="0" max="10000" value="{{ settings.fade_duration_ms }}" class="nova-input">
+          </div>
+
+          <label class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+            <input type="checkbox" name="shuffle" {% if settings.shuffle %}checked{% endif %}>
+            Shuffle order
+          </label>
+        </div>
+      </div>
+
+      <div class="nova-panel p-5">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Background Media</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">Selected files</h3>
+          </div>
+          <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">{{ selectable_files|length }}</span>
+        </div>
+        <p class="mt-3 text-sm leading-7 text-slate-400">Check exact files to use. If none are checked, the overlay uses the folder and media type options above.</p>
+
+        <div class="mt-5 space-y-3">
+          {% for file in selectable_files %}
+            {% set media_label = "Video" if file.mime_type.startswith("video/") else "Image" %}
+            <label class="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <span class="flex min-w-0 items-center gap-3">
+                <input type="checkbox" name="selected_file_ids" value="{{ file.id }}" {% if file.id in selected_file_ids %}checked{% endif %}>
+                <span class="min-w-0">
+                  <span class="block truncate text-sm font-medium text-white">{{ file.filename }}</span>
+                  <span class="text-xs text-slate-500">{{ media_label }} - {{ file.total_size|filesize }}</span>
+                </span>
+              </span>
+              <a href="{{ url_for('files.details', file_id=file.id) }}" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Open</a>
+            </label>
+          {% else %}
+            <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-8 text-center text-sm text-slate-400">
+              Upload images, GIFs, or videos before choosing OBS backgrounds.
+            </div>
+          {% endfor %}
+        </div>
+
+        <div class="mt-5 flex flex-wrap gap-3">
+          <button type="submit" class="nova-button-primary">Save OBS Background</button>
+          <a href="#obs-url-panel" class="nova-button-secondary">View URL</a>
+        </div>
+      </div>
+    </form>
+
+    <div class="space-y-6">
+      <div id="obs-url-panel" class="nova-panel p-5">
+        <p class="text-xs uppercase tracking-[0.28em] text-fuchsia-200/70">OBS URL</p>
+        <h3 class="mt-2 text-2xl font-semibold text-white">Browser source</h3>
+        <div class="mt-5 rounded-3xl border border-white/10 bg-white/5 p-4">
+          <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Overlay path</p>
+          <p class="mt-2 break-all text-sm text-white">{{ overlay_url }}</p>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <button type="button" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10" data-copy-text="{{ overlay_url }}" data-copy-success="OBS background URL copied.">Copy OBS URL</button>
+            <a href="{{ overlay_url }}" target="_blank" rel="noreferrer" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200 transition hover:border-fuchsia-400/40 hover:bg-white/10">Open</a>
+          </div>
+          {% if not generated_api_key %}
+            <p class="mt-3 text-xs leading-6 text-amber-200">Replace <span>YOUR_API_KEY</span> with your API key. Regenerate below if you need NovaDrive to show a fresh key once.</p>
+          {% endif %}
+        </div>
+
+        <div class="mt-4 rounded-3xl border border-white/10 bg-white/5 p-4">
+          <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Background API</p>
+          <p class="mt-2 break-all text-sm text-white">{{ background_api_url }}</p>
+        </div>
+
+        <form action="{{ url_for('auth.regenerate_api_key') }}" method="post" class="mt-4">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="nova-button-secondary w-full">{{ "Regenerate API Key" if current_user.has_api_key else "Generate API Key" }}</button>
+        </form>
+
+        {% if generated_api_key %}
+          <div class="mt-4 rounded-3xl border border-emerald-400/20 bg-emerald-500/10 p-4">
+            <p class="text-xs uppercase tracking-[0.24em] text-emerald-100">New API key</p>
+            <div class="mt-3 flex flex-col gap-3 sm:flex-row">
+              <input type="text" readonly value="{{ generated_api_key }}" class="nova-input flex-1">
+              <button type="button" class="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-100 transition hover:bg-white/10" data-copy-text="{{ generated_api_key }}">Copy Key</button>
+            </div>
+            <p class="mt-3 text-xs leading-6 text-emerald-100">This value is only shown once.</p>
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="nova-panel p-5">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Preview Set</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">Current output</h3>
+          </div>
+          <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">{{ preview_files|length }}</span>
+        </div>
+
+        <div class="mt-5 space-y-3">
+          {% for file in preview_files %}
+            <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <p class="truncate text-sm font-medium text-white">{{ file.filename }}</p>
+              <p class="mt-1 text-xs text-slate-500">{{ file.mime_type }} - {{ file.created_at|datetime }}</p>
+            </div>
+          {% else %}
+            <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-8 text-center text-sm text-slate-400">
+              No files currently match the saved OBS background settings.
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

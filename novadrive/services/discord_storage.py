@@ -20,21 +20,34 @@ class DiscordStorageBackend:
     def __init__(self, config: Mapping[str, Any]):
         self.base_url = config["DISCORD_BOT_BRIDGE_URL"]
         self.shared_secret = config["DISCORD_BOT_BRIDGE_SHARED_SECRET"]
+        self.connect_timeout = max(1, int(config["DISCORD_BOT_BRIDGE_CONNECT_TIMEOUT_SECONDS"]))
         self.timeout = config["DISCORD_BOT_BRIDGE_TIMEOUT_SECONDS"]
         self.storage_channel_ids = config["DISCORD_STORAGE_CHANNEL_IDS"]
 
-        retry = Retry(
+        upload_retry = Retry(
             total=int(config["DISCORD_UPLOAD_RETRY_COUNT"]),
             connect=int(config["DISCORD_UPLOAD_RETRY_COUNT"]),
             read=int(config["DISCORD_UPLOAD_RETRY_COUNT"]),
             backoff_factor=0.5,
             status_forcelist=(429, 500, 502, 503, 504),
-            allowed_methods={"GET", "POST", "DELETE"},
+            allowed_methods={"POST", "DELETE"},
         )
-        adapter = HTTPAdapter(max_retries=retry)
+        fetch_retry = Retry(
+            total=int(config["DISCORD_FETCH_RETRY_COUNT"]),
+            connect=int(config["DISCORD_FETCH_RETRY_COUNT"]),
+            read=int(config["DISCORD_FETCH_RETRY_COUNT"]),
+            backoff_factor=0.2,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods={"GET"},
+        )
+        adapter = HTTPAdapter(max_retries=upload_retry)
+        fetch_adapter = HTTPAdapter(max_retries=fetch_retry)
         self.session = requests.Session()
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
+        self.fetch_session = requests.Session()
+        self.fetch_session.mount("http://", fetch_adapter)
+        self.fetch_session.mount("https://", fetch_adapter)
 
     def _headers(self) -> dict[str, str]:
         return {"X-NovaDrive-Bridge-Secret": self.shared_secret}
@@ -49,7 +62,7 @@ class DiscordStorageBackend:
             response = requests.get(
                 f"{self.base_url}/health",
                 headers=self._headers(),
-                timeout=(2, 5),
+                timeout=(self.connect_timeout, 5),
             )
             response.raise_for_status()
             payload = response.json()
@@ -84,7 +97,7 @@ class DiscordStorageBackend:
                         "application/octet-stream",
                     )
                 },
-                timeout=(10, self.timeout),
+                timeout=(self.connect_timeout, self.timeout),
             )
             response.raise_for_status()
             payload = response.json()
@@ -108,10 +121,10 @@ class DiscordStorageBackend:
 
     def fetch_chunk(self, channel_id: str | int, message_id: str | int) -> bytes:
         try:
-            response = self.session.get(
+            response = self.fetch_session.get(
                 f"{self.base_url}/chunks/{channel_id}/{message_id}",
                 headers=self._headers(),
-                timeout=(10, self.timeout),
+                timeout=(self.connect_timeout, self.timeout),
             )
             response.raise_for_status()
             structured_log(
@@ -137,7 +150,7 @@ class DiscordStorageBackend:
             response = self.session.delete(
                 f"{self.base_url}/chunks/{channel_id}/{message_id}",
                 headers=self._headers(),
-                timeout=(10, self.timeout),
+                timeout=(self.connect_timeout, self.timeout),
             )
             response.raise_for_status()
             structured_log(
